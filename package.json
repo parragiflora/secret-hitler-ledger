@@ -1,0 +1,17 @@
+{
+  "name": "interhuman-secret-hitler",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "test": "npm run test --workspace=@interhuman/shared",
+    "dev:server": "npm run dev --workspace=@interhuman/server",
+    "dev:client": "npm run dev --workspace=@interhuman/client",
+    "build": "npm run build --workspace=@interhuman/shared && npm run build --workspace=@interhuman/server && npm run build --workspace=@interhuman/client"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}

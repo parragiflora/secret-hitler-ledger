@@ -1,0 +1,134 @@
+:root {
+  --bg: #14171c;
+  --panel: #1d2129;
+  --panel-2: #242933;
+  --border: #333a47;
+  --text: #e8e9ec;
+  --text-dim: #9aa1ad;
+  --liberal: #3d7bd9;
+  --fascist: #b0342d;
+  --hitler: #7a1f1a;
+  --accent: #c9a227;
+  --danger: #b0342d;
+  --radius: 8px;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Georgia", "Iowan Old Style", serif;
+}
+
+#root { min-height: 100vh; }
+
+button {
+  font-family: inherit;
+  font-size: 0.95rem;
+  padding: 0.55rem 1rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  cursor: pointer;
+}
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: 0.5; cursor: default; }
+button.secondary { background: transparent; }
+button.link { background: none; border: none; text-decoration: underline; color: var(--text-dim); }
+button.danger { border-color: var(--fascist); }
+button.ja { background: #234a2c; border-color: #3c8451; }
+button.nein { background: #4a2323; border-color: #843c3c; }
+
+input {
+  font-family: inherit;
+  padding: 0.5rem 0.6rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.app-shell { min-height: 100vh; display: flex; flex-direction: column; }
+
+.join-screen {
+  max-width: 420px;
+  margin: 10vh auto;
+  padding: 2rem;
+  text-align: center;
+}
+.join-screen h1 { font-size: 1.6rem; margin-bottom: 0.2rem; }
+.tagline { color: var(--text-dim); font-style: italic; margin-top: 0; }
+.join-form { display: flex; flex-direction: column; gap: 1rem; margin: 1.5rem 0; text-align: left; }
+.join-form label { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.85rem; color: var(--text-dim); }
+.divider { color: var(--text-dim); margin: 0.5rem 0; }
+.error { color: #ff8a80; margin-top: 1rem; }
+
+.board-header {
+  border-bottom: 1px solid var(--border);
+  padding: 0.9rem 1.5rem;
+  background: var(--panel);
+}
+.brand { font-size: 1.1rem; letter-spacing: 0.02em; display: flex; align-items: center; gap: 0.6rem; }
+.brand-mark { color: var(--accent); }
+.room-code { margin-left: auto; font-size: 0.8rem; color: var(--text-dim); }
+.tracks { display: flex; gap: 2rem; margin-top: 0.6rem; flex-wrap: wrap; }
+.track { display: flex; flex-direction: column; gap: 0.25rem; }
+.track-label { font-size: 0.75rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; }
+.track-slots { display: flex; gap: 0.3rem; }
+.slot { width: 22px; height: 22px; border-radius: 4px; border: 1px solid var(--border); background: var(--panel-2); }
+.slot.filled { background: var(--liberal); border-color: var(--liberal); }
+.tracks .track:nth-child(2) .slot.filled { background: var(--fascist); border-color: var(--fascist); }
+.dot { width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--border); background: var(--panel-2); }
+.dot.filled { background: var(--accent); border-color: var(--accent); }
+.meta { margin-top: 0.6rem; font-size: 0.8rem; color: var(--text-dim); display: flex; gap: 0.8rem; align-items: center; }
+.badge { background: var(--accent); color: #1a1a1a; padding: 0.1rem 0.5rem; border-radius: 999px; font-size: 0.7rem; }
+
+.layout { display: grid; grid-template-columns: 220px 1fr 260px; gap: 1rem; padding: 1.2rem; flex: 1; }
+@media (max-width: 900px) {
+  .layout { grid-template-columns: 1fr; }
+}
+
+.roster, .event-log { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; }
+.roster h3, .event-log h3 { margin-top: 0; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); }
+.roster ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.roster li { display: flex; align-items: center; gap: 0.4rem; font-size: 0.9rem; flex-wrap: wrap; }
+.roster li.dead { opacity: 0.5; text-decoration: line-through; }
+.roster .you { color: var(--accent); font-size: 0.75rem; }
+.roster .offline, .roster .dead-label { font-size: 0.7rem; color: var(--text-dim); }
+.known-role { font-size: 0.65rem; padding: 0.05rem 0.4rem; border-radius: 999px; border: 1px solid var(--border); text-transform: uppercase; }
+.known-role.fascist, .known-role.hitler { border-color: var(--fascist); color: #ff8a80; }
+
+.event-log ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column-reverse; gap: 0.5rem; }
+.event-log li { font-size: 0.82rem; color: var(--text-dim); border-left: 2px solid var(--border); padding-left: 0.5rem; }
+
+.main-panel { display: flex; flex-direction: column; gap: 1rem; }
+.your-role { background: var(--panel-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 0.6rem 1rem; font-size: 0.85rem; }
+.allies { color: var(--text-dim); margin-top: 0.2rem; }
+
+.panel { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.5rem; }
+.panel h2 { margin-top: 0; }
+.hint { color: var(--text-dim); font-size: 0.85rem; }
+
+.role-badge { display: inline-block; padding: 0.4rem 1rem; border-radius: var(--radius); font-weight: bold; letter-spacing: 0.05em; margin-bottom: 0.8rem; }
+.role-badge.liberal { background: var(--liberal); }
+.role-badge.fascist { background: var(--fascist); }
+.role-badge.hitler { background: var(--hitler); }
+
+.choice-grid { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 0.8rem; }
+.vote-buttons { display: flex; gap: 1rem; margin: 1rem 0; }
+.vote-buttons button { flex: 1; padding: 0.8rem; font-size: 1.05rem; }
+
+.policy-row { display: flex; gap: 1rem; margin: 1rem 0; flex-wrap: wrap; }
+.policy-choice { display: flex; flex-direction: column; gap: 0.5rem; align-items: center; }
+.policy-card { width: 110px; padding: 1.2rem 0.6rem; text-align: center; border-radius: var(--radius); font-weight: bold; border: 2px solid var(--border); }
+.policy-card.liberal { background: rgba(61, 123, 217, 0.18); border-color: var(--liberal); color: #a9c8ff; }
+.policy-card.fascist { background: rgba(176, 52, 45, 0.18); border-color: var(--fascist); color: #ffb0a9; }
+
+.final-roles { list-style: none; padding: 0; }
+.final-roles li { padding: 0.3rem 0; border-bottom: 1px solid var(--border); }
+
+.app-footer { padding: 1rem 1.5rem; text-align: right; }

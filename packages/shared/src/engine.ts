@@ -1,0 +1,519 @@
+// Section 2-5: the core rules-engine state machine. Pure reducer: (state, action, rng) -> state.
+// No I/O, no AI, no video -- per section 9 build order, this is Phase 1 in isolation.
+import type { GameAction, GameState, Player, WinReason } from "./types.js";
+import { GameRuleError } from "./types.js";
+import { assignRoles, teamOf } from "./roles.js";
+import { freshDeck, drawPolicies } from "./deck.js";
+import { powerForSlot } from "./powers.js";
+import { shouldUnlockVeto } from "./veto.js";
+import {
+  eligibleChancellorNominees,
+  nextAlivePlayerClockwise,
+  presidentTermLimitApplies,
+  seatOrderOf,
+} from "./succession.js";
+import { checkPolicyAndExecutionWin, isHitlerChancellorWin } from "./winConditions.js";
+
+export function createGame(id: string, code: string): GameState {
+  return {
+    id,
+    code,
+    phase: "LOBBY",
+    playerCount: 0,
+    players: [],
+    roundNumber: 0,
+    presidentId: null,
+    chancellorId: null,
+    presidentialCandidateId: null,
+    previousPresidentId: null,
+    previousChancellorId: null,
+    succeedFromPlayerId: null,
+    electionTracker: 0,
+    termLimitedChancellorId: null,
+    termLimitedPresidentId: null,
+    drawPile: [],
+    discardPile: [],
+    liberalPoliciesEnacted: 0,
+    fascistPoliciesEnacted: 0,
+    vetoUnlocked: false,
+    vetoAttempts: [],
+    pendingVetoProposal: false,
+    currentVotes: [],
+    voteHistory: [],
+    lastVoteResult: null,
+    presidentDrawnPolicies: null,
+    chancellorHandPolicies: null,
+    lastEnactedPolicy: null,
+    lastEnactedByChaos: false,
+    pendingExecutivePower: null,
+    pendingExecutionTargetId: null,
+    specialElectionNextPresidentId: null,
+    executiveActions: [],
+    investigatedPlayerIds: [],
+    acknowledgedRoles: [],
+    pendingExecutiveResult: null,
+    winner: null,
+    winReason: null,
+    log: [],
+  };
+}
+
+function withLog(state: GameState, entry: string): GameState {
+  return { ...state, log: [...state.log, entry] };
+}
+
+function requirePlayer(state: GameState, playerId: string): Player {
+  const p = state.players.find((pl) => pl.id === playerId);
+  if (!p) throw new GameRuleError(`No such player: ${playerId}`);
+  return p;
+}
+
+function setWin(state: GameState, winner: "liberal" | "fascist", reason: WinReason, note: string): GameState {
+  return withLog({ ...state, phase: "GAME_END", winner, winReason: reason }, note);
+}
+
+/** Starts the next round: resets round-transient fields, applies succession (section 3). */
+function beginNextRound(state: GameState, presidentOverride?: string): GameState {
+  let nextPresidentId: string;
+  let succeedFromPlayerId = state.succeedFromPlayerId;
+
+  if (presidentOverride) {
+    nextPresidentId = presidentOverride;
+    // succeedFromPlayerId was set by the special-election action and is
+    // consumed on the round AFTER this special round, not this one.
+  } else if (succeedFromPlayerId) {
+    nextPresidentId = succeedFromPlayerId;
+    succeedFromPlayerId = null;
+  } else {
+    const current = state.presidentId ? state.players.find((p) => p.id === state.presidentId) : null;
+    const afterSeat = current ? current.seatOrder : -1;
+    const next = nextAlivePlayerClockwise(state.players, afterSeat);
+    if (!next) throw new GameRuleError("No alive players remain to hold the presidency.");
+    nextPresidentId = next.id;
+  }
+
+  return {
+    ...state,
+    phase: "NOMINATION",
+    roundNumber: state.roundNumber + 1,
+    previousPresidentId: state.presidentId,
+    previousChancellorId: state.chancellorId,
+    presidentId: nextPresidentId,
+    chancellorId: null,
+    presidentialCandidateId: null,
+    currentVotes: [],
+    succeedFromPlayerId,
+  };
+}
+
+/** Section 2 CHAOS_POLICY: election tracker hit 3. Auto-enacts top policy, resets tracker + term limits. */
+function runChaosPolicy(state: GameState, rng: () => number): GameState {
+  const { drawn, drawPile, discardPile } = drawPolicies(state.drawPile, state.discardPile, 1, rng);
+  const tile = drawn[0];
+  let next: GameState = {
+    ...state,
+    drawPile,
+    discardPile,
+    lastEnactedPolicy: tile ?? null,
+    lastEnactedByChaos: true,
+    electionTracker: 0,
+    termLimitedChancellorId: null,
+    termLimitedPresidentId: null,
+  };
+  if (tile === "liberal") next.liberalPoliciesEnacted += 1;
+  if (tile === "fascist") {
+    next.fascistPoliciesEnacted += 1;
+    next.vetoUnlocked = next.vetoUnlocked || shouldUnlockVeto(next.playerCount, next.fascistPoliciesEnacted);
+  }
+  next = withLog(next, `Chaos! Election tracker maxed out -- top policy (${tile}) auto-enacted. Term limits reset.`);
+  return next;
+}
+
+/** Shared tail for a failed/vetoed government: increment tracker, maybe chaos, check win, advance. */
+function resolveGovernmentFailure(state: GameState, rng: () => number): GameState {
+  let next: GameState = { ...state, electionTracker: state.electionTracker + 1 };
+  if (next.electionTracker >= 3) {
+    next = runChaosPolicy(next, rng);
+    const winCheck = checkPolicyAndExecutionWin(next.liberalPoliciesEnacted, next.fascistPoliciesEnacted, next.players);
+    if (winCheck.winner) return setWin(next, winCheck.winner, winCheck.reason!, `Game over: ${winCheck.reason}.`);
+  }
+  return beginNextRound(next);
+}
+
+export function reduce(state: GameState, action: GameAction, rng: () => number = Math.random): GameState {
+  switch (action.type) {
+    case "JOIN_GAME": {
+      if (state.phase !== "LOBBY") throw new GameRuleError("Cannot join a game that has already started.");
+      if (state.players.some((p) => p.id === action.playerId)) return state;
+      if (state.players.length >= 10) throw new GameRuleError("Lobby is full (max 10 players).");
+      const player: Player = {
+        id: action.playerId,
+        name: action.name,
+        role: null,
+        seatOrder: state.players.length,
+        isAlive: true,
+        isConnected: true,
+      };
+      return withLog({ ...state, players: [...state.players, player] }, `${action.name} joined.`);
+    }
+
+    case "LEAVE_GAME": {
+      if (state.phase !== "LOBBY") throw new GameRuleError("Cannot leave after the game has started.");
+      const remaining = state.players.filter((p) => p.id !== action.playerId);
+      // Re-sequence seat order to stay contiguous.
+      const reseated = remaining.map((p, i) => ({ ...p, seatOrder: i }));
+      return { ...state, players: reseated };
+    }
+
+    case "SET_CONNECTED": {
+      return {
+        ...state,
+        players: state.players.map((p) => (p.id === action.playerId ? { ...p, isConnected: action.isConnected } : p)),
+      };
+    }
+
+    case "START_GAME": {
+      if (state.phase !== "LOBBY") throw new GameRuleError("Game already started.");
+      if (state.players.length < 5 || state.players.length > 10) {
+        throw new GameRuleError("Secret Hitler requires 5-10 players to start.");
+      }
+      const playersWithRoles = assignRoles(state.players, rng);
+      const drawPile = freshDeck(rng);
+      const firstPresident = playersWithRoles[Math.floor(rng() * playersWithRoles.length)];
+      return withLog(
+        {
+          ...state,
+          phase: "ROLE_REVEAL",
+          playerCount: playersWithRoles.length,
+          players: playersWithRoles,
+          drawPile,
+          discardPile: [],
+          roundNumber: 0,
+          presidentId: firstPresident.id,
+        },
+        "Game started. Roles assigned.",
+      );
+    }
+
+    case "ACKNOWLEDGE_ROLE": {
+      if (state.phase !== "ROLE_REVEAL") throw new GameRuleError("Not in role reveal.");
+      requirePlayer(state, action.playerId);
+      const acknowledgedRoles = state.acknowledgedRoles.includes(action.playerId)
+        ? state.acknowledgedRoles
+        : [...state.acknowledgedRoles, action.playerId];
+      if (acknowledgedRoles.length === state.players.length) {
+        return beginNextRound({ ...state, acknowledgedRoles }, state.presidentId ?? undefined);
+      }
+      return { ...state, acknowledgedRoles };
+    }
+
+    case "NOMINATE_CHANCELLOR": {
+      if (state.phase !== "NOMINATION") throw new GameRuleError("Not in nomination phase.");
+      if (action.presidentId !== state.presidentId) throw new GameRuleError("Only the President may nominate.");
+      const nominee = requirePlayer(state, action.nomineeId);
+      const eligible = eligibleChancellorNominees(
+        state.players,
+        state.presidentId!,
+        state.termLimitedChancellorId,
+        state.termLimitedPresidentId,
+      );
+      if (!eligible.some((p) => p.id === nominee.id)) {
+        throw new GameRuleError(`${nominee.name} is not eligible for nomination (dead or term-limited).`);
+      }
+      return withLog(
+        { ...state, phase: "ELECTION_VOTE", presidentialCandidateId: nominee.id, currentVotes: [] },
+        `${requirePlayer(state, action.presidentId).name} nominates ${nominee.name} for Chancellor.`,
+      );
+    }
+
+    case "CAST_VOTE": {
+      if (state.phase !== "ELECTION_VOTE") throw new GameRuleError("Not in an election vote.");
+      const voter = requirePlayer(state, action.playerId);
+      if (!voter.isAlive) throw new GameRuleError("Dead players cannot vote.");
+      if (state.currentVotes.some((v) => v.playerId === action.playerId)) {
+        throw new GameRuleError("Player has already voted this round.");
+      }
+      const currentVotes = [...state.currentVotes, { round: state.roundNumber, playerId: action.playerId, choice: action.choice }];
+      const aliveCount = state.players.filter((p) => p.isAlive).length;
+      if (currentVotes.length < aliveCount) {
+        return { ...state, currentVotes }; // votes stay hidden until all are in (section 2)
+      }
+
+      // All votes are in -- resolve.
+      const ja = currentVotes.filter((v) => v.choice === "ja").length;
+      const nein = currentVotes.length - ja;
+      const passed = ja > nein; // ties fail
+      const voteHistory = [...state.voteHistory, ...currentVotes];
+      const nominee = requirePlayer(state, state.presidentialCandidateId!);
+
+      let next: GameState = withLog(
+        { ...state, currentVotes: [], voteHistory, lastVoteResult: { ja, nein, passed } },
+        `Election result: ${ja} Ja - ${nein} Nein. Government ${passed ? "elected" : "fails"}.`,
+      );
+
+      if (!passed) {
+        return resolveGovernmentFailure(next, rng);
+      }
+
+      // Immediate Fascist win: 3rd+ Fascist policy already on board and the elected Chancellor is Hitler.
+      if (isHitlerChancellorWin(next.fascistPoliciesEnacted, nominee)) {
+        return setWin(
+          next,
+          "fascist",
+          "hitler_elected_chancellor",
+          `${nominee.name} (Hitler) was elected Chancellor after the 3rd Fascist policy. Fascists win.`,
+        );
+      }
+
+      const { drawn, drawPile, discardPile } = drawPolicies(next.drawPile, next.discardPile, 3, rng);
+      return {
+        ...next,
+        phase: "LEGISLATIVE_PRESIDENT",
+        chancellorId: nominee.id,
+        electionTracker: 0,
+        termLimitedChancellorId: nominee.id,
+        termLimitedPresidentId: presidentTermLimitApplies(next.playerCount) ? next.presidentId : null,
+        drawPile,
+        discardPile,
+        presidentDrawnPolicies: drawn,
+      };
+    }
+
+    case "PRESIDENT_DISCARD": {
+      if (state.phase !== "LEGISLATIVE_PRESIDENT") throw new GameRuleError("Not in the President's legislative phase.");
+      if (action.presidentId !== state.presidentId) throw new GameRuleError("Only the President may discard here.");
+      const hand = state.presidentDrawnPolicies;
+      if (!hand || hand.length !== 3) throw new GameRuleError("President has no policies to discard from.");
+      const discarded = hand[action.discardIndex];
+      const passedToChancellor = hand.filter((_, i) => i !== action.discardIndex);
+      return withLog(
+        {
+          ...state,
+          phase: "LEGISLATIVE_CHANCELLOR",
+          presidentDrawnPolicies: null,
+          chancellorHandPolicies: passedToChancellor,
+          discardPile: [...state.discardPile, discarded],
+        },
+        "President passes 2 policies to the Chancellor.",
+      );
+    }
+
+    case "CHANCELLOR_PROPOSE_VETO": {
+      if (state.phase !== "LEGISLATIVE_CHANCELLOR") throw new GameRuleError("Not in the Chancellor's legislative phase.");
+      if (!state.vetoUnlocked) throw new GameRuleError("Veto power is not unlocked.");
+      if (action.chancellorId !== state.chancellorId) throw new GameRuleError("Only the Chancellor may propose a veto.");
+      if (!state.chancellorHandPolicies || state.chancellorHandPolicies.length !== 2) {
+        throw new GameRuleError("Chancellor has no policies to veto.");
+      }
+      return withLog(
+        { ...state, phase: "VETO_RESPONSE", pendingVetoProposal: true },
+        `${requirePlayer(state, action.chancellorId).name} proposes a veto.`,
+      );
+    }
+
+    case "PRESIDENT_VETO_RESPONSE": {
+      if (state.phase !== "VETO_RESPONSE") throw new GameRuleError("No veto proposal pending.");
+      if (action.presidentId !== state.presidentId) throw new GameRuleError("Only the President may respond to a veto.");
+      const vetoAttempts = [
+        ...state.vetoAttempts,
+        { round: state.roundNumber, proposedBy: state.chancellorId!, presidentResponse: action.accept ? ("accepted" as const) : ("rejected" as const) },
+      ];
+
+      if (action.accept) {
+        const discardPile = [...state.discardPile, ...(state.chancellorHandPolicies ?? [])];
+        const next = withLog(
+          {
+            ...state,
+            discardPile,
+            chancellorHandPolicies: null,
+            pendingVetoProposal: false,
+            vetoAttempts,
+          },
+          "President accepts the veto. Both policies discarded; no policy enacted.",
+        );
+        return resolveGovernmentFailure(next, rng);
+      }
+
+      return withLog(
+        { ...state, phase: "LEGISLATIVE_CHANCELLOR", pendingVetoProposal: false, vetoAttempts },
+        "President rejects the veto. Chancellor must enact a policy.",
+      );
+    }
+
+    case "CHANCELLOR_ENACT": {
+      if (state.phase !== "LEGISLATIVE_CHANCELLOR") throw new GameRuleError("Not in the Chancellor's legislative phase.");
+      if (action.chancellorId !== state.chancellorId) throw new GameRuleError("Only the Chancellor may enact.");
+      const hand = state.chancellorHandPolicies;
+      if (!hand || hand.length !== 2) throw new GameRuleError("Chancellor has no policies to enact from.");
+      const enacted = hand[action.enactIndex];
+      const discarded = hand[action.enactIndex === 0 ? 1 : 0];
+      let next: GameState = {
+        ...state,
+        chancellorHandPolicies: null,
+        discardPile: [...state.discardPile, discarded],
+        lastEnactedPolicy: enacted,
+        lastEnactedByChaos: false,
+      };
+      if (enacted === "liberal") next.liberalPoliciesEnacted += 1;
+      if (enacted === "fascist") {
+        next.fascistPoliciesEnacted += 1;
+        next.vetoUnlocked = next.vetoUnlocked || shouldUnlockVeto(next.playerCount, next.fascistPoliciesEnacted);
+      }
+      next = { ...next, phase: "POLICY_DEFENSE" };
+      return withLog(next, `Chancellor enacts a ${enacted} policy.`);
+    }
+
+    case "ACKNOWLEDGE_POLICY_DEFENSE": {
+      if (state.phase !== "POLICY_DEFENSE") throw new GameRuleError("Not in policy defense.");
+      if (action.chancellorId !== state.chancellorId) throw new GameRuleError("Only the Chancellor can continue from here.");
+
+      const winCheck = checkPolicyAndExecutionWin(state.liberalPoliciesEnacted, state.fascistPoliciesEnacted, state.players);
+      if (winCheck.winner) return setWin(state, winCheck.winner, winCheck.reason!, `Game over: ${winCheck.reason}.`);
+
+      if (state.lastEnactedPolicy === "fascist") {
+        const power = powerForSlot(state.playerCount, state.fascistPoliciesEnacted);
+        if (power) {
+          return withLog(
+            { ...state, phase: "EXECUTIVE_ACTION", pendingExecutivePower: power },
+            `Executive power triggered: ${power}.`,
+          );
+        }
+      }
+      return beginNextRound(state);
+    }
+
+    case "EXECUTIVE_INVESTIGATE": {
+      assertExecutivePower(state, action.presidentId, "investigate_loyalty");
+      const target = requirePlayer(state, action.targetId);
+      if (target.id === action.presidentId) throw new GameRuleError("The President cannot investigate themselves.");
+      if (!target.isAlive) throw new GameRuleError("Cannot investigate a dead player.");
+      if (state.investigatedPlayerIds.includes(target.id)) throw new GameRuleError("That player has already been investigated.");
+      const result = { team: teamOf(target.role!) };
+      return withLog(
+        {
+          ...state,
+          investigatedPlayerIds: [...state.investigatedPlayerIds, target.id],
+          pendingExecutiveResult: result,
+          executiveActions: [
+            ...state.executiveActions,
+            { round: state.roundNumber, powerType: "investigate_loyalty", actorId: action.presidentId, targetId: target.id, privateResult: result },
+          ],
+        },
+        `The President investigates ${target.name}.`,
+      );
+    }
+
+    case "EXECUTIVE_POLICY_PEEK": {
+      assertExecutivePower(state, action.presidentId, "policy_peek");
+      const peeked = state.drawPile.slice(0, 3);
+      const result = { peeked };
+      return withLog(
+        {
+          ...state,
+          pendingExecutiveResult: result,
+          executiveActions: [
+            ...state.executiveActions,
+            { round: state.roundNumber, powerType: "policy_peek", actorId: action.presidentId, targetId: null, privateResult: result },
+          ],
+        },
+        "The President peeks at the top of the draw pile.",
+      );
+    }
+
+    case "EXECUTIVE_SPECIAL_ELECTION": {
+      assertExecutivePower(state, action.presidentId, "special_election");
+      const target = requirePlayer(state, action.targetId);
+      if (target.id === action.presidentId) throw new GameRuleError("The President must choose someone else.");
+      if (!target.isAlive) throw new GameRuleError("Cannot hand the presidency to a dead player.");
+      const current = requirePlayer(state, action.presidentId);
+      const wouldHaveBeen = nextAlivePlayerClockwise(state.players, current.seatOrder);
+      return withLog(
+        {
+          ...state,
+          specialElectionNextPresidentId: target.id,
+          succeedFromPlayerId: wouldHaveBeen ? wouldHaveBeen.id : null,
+          pendingExecutiveResult: null,
+          executiveActions: [
+            ...state.executiveActions,
+            { round: state.roundNumber, powerType: "special_election", actorId: action.presidentId, targetId: target.id, privateResult: null },
+          ],
+        },
+        `The President names ${target.name} as the next President (Special Election).`,
+      );
+    }
+
+    case "EXECUTIVE_EXECUTION": {
+      assertExecutivePower(state, action.presidentId, "execution");
+      const target = requirePlayer(state, action.targetId);
+      if (target.id === action.presidentId) throw new GameRuleError("The President cannot execute themselves.");
+      if (!target.isAlive) throw new GameRuleError("That player is already out of the game.");
+      return withLog(
+        {
+          ...state,
+          pendingExecutionTargetId: target.id,
+          executiveActions: [
+            ...state.executiveActions,
+            { round: state.roundNumber, powerType: "execution", actorId: action.presidentId, targetId: target.id, privateResult: null },
+          ],
+        },
+        // Deliberately says "is about to be executed" (not "was executed") -- this is the
+        // hook point for the future last_words capture / Special Session trigger #2 (section 6, 7).
+        `The President chooses ${target.name} to be executed.`,
+      );
+    }
+
+    case "ACKNOWLEDGE_EXECUTIVE_ACTION": {
+      if (state.phase !== "EXECUTIVE_ACTION") throw new GameRuleError("Not in an executive action.");
+      if (action.presidentId !== state.presidentId) throw new GameRuleError("Only the President can continue from here.");
+      if (!state.pendingExecutivePower) throw new GameRuleError("No executive power to resolve.");
+
+      const power = state.pendingExecutivePower;
+      let next: GameState = state;
+
+      if (power === "execution") {
+        if (!state.pendingExecutionTargetId) throw new GameRuleError("No execution target chosen yet.");
+        const targetId = state.pendingExecutionTargetId;
+        next = withLog(
+          {
+            ...next,
+            players: next.players.map((p) => (p.id === targetId ? { ...p, isAlive: false } : p)),
+          },
+          `${requirePlayer(state, targetId).name} is executed.`,
+        );
+      }
+      if (power === "special_election" && !state.specialElectionNextPresidentId) {
+        throw new GameRuleError("No special election target chosen yet.");
+      }
+
+      next = {
+        ...next,
+        pendingExecutivePower: null,
+        pendingExecutionTargetId: null,
+        pendingExecutiveResult: null,
+      };
+
+      const winCheck = checkPolicyAndExecutionWin(next.liberalPoliciesEnacted, next.fascistPoliciesEnacted, next.players);
+      if (winCheck.winner) return setWin(next, winCheck.winner, winCheck.reason!, `Game over: ${winCheck.reason}.`);
+
+      if (power === "special_election") {
+        const target = next.specialElectionNextPresidentId!;
+        return beginNextRound({ ...next, specialElectionNextPresidentId: null }, target);
+      }
+      return beginNextRound(next);
+    }
+
+    default:
+      return state;
+  }
+}
+
+function assertExecutivePower(
+  state: GameState,
+  presidentId: string,
+  power: "investigate_loyalty" | "policy_peek" | "special_election" | "execution",
+): void {
+  if (state.phase !== "EXECUTIVE_ACTION") throw new GameRuleError("Not in an executive action.");
+  if (presidentId !== state.presidentId) throw new GameRuleError("Only the President may use this power.");
+  if (state.pendingExecutivePower !== power) throw new GameRuleError(`Pending power is not ${power}.`);
+  requirePlayer(state, presidentId);
+}
