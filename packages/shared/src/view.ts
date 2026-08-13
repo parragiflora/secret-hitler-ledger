@@ -86,6 +86,10 @@ function computeKnownRoles(state: GameState, viewerId: string): Record<string, R
     const hitlerKnowsFascists = state.playerCount <= 6;
     if (viewer.role === "fascist" || hitlerKnowsFascists) {
       for (const p of state.players) {
+        // Exclude self -- the viewer already knows their own role via myRole;
+        // knownRoles is "who ELSE you recognize as a teammate" (avoids a
+        // player seeing themselves listed in their own "your team" list).
+        if (p.id === viewerId) continue;
         if (p.role === "fascist" || p.role === "hitler") known[p.id] = p.role;
       }
     } else {

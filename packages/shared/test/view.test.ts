@@ -23,8 +23,13 @@ describe("per-player view redaction (section 1 role visibility)", () => {
     const fascistId = state.players.find((p) => p.role === "fascist")!.id;
     const view = viewForPlayer(state, fascistId);
     const knownIds = Object.keys(view.knownRoles);
-    const expectedIds = state.players.filter((p) => p.role === "fascist" || p.role === "hitler").map((p) => p.id);
+    // Excludes the viewer themselves -- knownRoles is "who else you recognize
+    // as a teammate", not a restatement of your own role (see myRole).
+    const expectedIds = state.players
+      .filter((p) => (p.role === "fascist" || p.role === "hitler") && p.id !== fascistId)
+      .map((p) => p.id);
     expect(knownIds.sort()).toEqual(expectedIds.sort());
+    expect(knownIds).not.toContain(fascistId);
   });
 
   it("Hitler knows the Fascist team in 5-6 player games", () => {
