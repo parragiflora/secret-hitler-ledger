@@ -241,3 +241,94 @@ describe("investigate loyalty (section 5)", () => {
     ).toThrow(GameRuleError);
   });
 });
+
+describe("RECORD_SPEECH_EVENT (section 6 capture hooks)", () => {
+  it("logs a completed recording from the correct speaker", () => {
+    const { state, ids } = makeStateWithRoles(FIVE_P); // NOMINATION -> nomination_speech, speaker = ids[0]
+    const s = reduce(
+      state,
+      { type: "RECORD_SPEECH_EVENT", playerId: ids[0], eventType: "nomination_speech", durationMs: 21000, skipped: false },
+      rng,
+    );
+    expect(s.speechEvents).toHaveLength(1);
+    expect(s.speechEvents[0]).toMatchObject({
+      playerId: ids[0],
+      eventType: "nomination_speech",
+      roundNumber: state.roundNumber,
+      durationMs: 21000,
+      skipped: false,
+      clipRef: null,
+    });
+  });
+
+  it("logs a skip with durationMs forced to null", () => {
+    const { state, ids } = makeStateWithRoles(FIVE_P);
+    const s = reduce(
+      state,
+      { type: "RECORD_SPEECH_EVENT", playerId: ids[0], eventType: "nomination_speech", durationMs: 9999, skipped: true },
+      rng,
+    );
+    expect(s.speechEvents[0].skipped).toBe(true);
+    expect(s.speechEvents[0].durationMs).toBeNull();
+  });
+
+  it("rejects a recording from anyone other than the required speaker", () => {
+    const { state, ids } = makeStateWithRoles(FIVE_P); // President is ids[0]; ids[1] is not the speaker
+    expect(() =>
+      reduce(
+        state,
+        { type: "RECORD_SPEECH_EVENT", playerId: ids[1], eventType: "nomination_speech", durationMs: 5000, skipped: false },
+        rng,
+      ),
+    ).toThrow(GameRuleError);
+  });
+
+  it("rejects an eventType that doesn't match the currently active capture moment", () => {
+    const { state, ids } = makeStateWithRoles(FIVE_P); // active moment is nomination_speech, not policy_defense
+    expect(() =>
+      reduce(
+        state,
+        { type: "RECORD_SPEECH_EVENT", playerId: ids[0], eventType: "policy_defense", durationMs: 5000, skipped: false },
+        rng,
+      ),
+    ).toThrow(GameRuleError);
+  });
+
+  it("rejects recording when there is no active capture moment (e.g. LEGISLATIVE_PRESIDENT)", () => {
+    const { state, ids } = makeStateWithRoles(FIVE_P);
+    const s: GameState = { ...state, phase: "LEGISLATIVE_PRESIDENT", presidentDrawnPolicies: ["liberal", "liberal", "fascist"] };
+    expect(() =>
+      reduce(
+        s,
+        { type: "RECORD_SPEECH_EVENT", playerId: ids[0], eventType: "nomination_speech", durationMs: 5000, skipped: false },
+        rng,
+      ),
+    ).toThrow(GameRuleError);
+  });
+
+  it("rejects a duplicate recording for the same moment", () => {
+    const { state, ids } = makeStateWithRoles(FIVE_P);
+    const once = reduce(
+      state,
+      { type: "RECORD_SPEECH_EVENT", playerId: ids[0], eventType: "nomination_speech", durationMs: 5000, skipped: false },
+      rng,
+    );
+    expect(() =>
+      reduce(
+        once,
+        { type: "RECORD_SPEECH_EVENT", playerId: ids[0], eventType: "nomination_speech", durationMs: 5000, skipped: false },
+        rng,
+      ),
+    ).toThrow(GameRuleError);
+  });
+
+  it("doesn't block the underlying game action -- capture is a parallel, non-gating log", () => {
+    // Section 6: nomination_speech is "required (prompt if skipped)" -- a UX
+    // nudge, not a hard engine-level gate. The President can still nominate
+    // without ever sending RECORD_SPEECH_EVENT.
+    const { state, ids } = makeStateWithRoles(FIVE_P);
+    const s = reduce(state, { type: "NOMINATE_CHANCELLOR", presidentId: ids[0], nomineeId: ids[1] }, rng);
+    expect(s.phase).toBe("ELECTION_VOTE");
+    expect(s.speechEvents).toHaveLength(0);
+  });
+});

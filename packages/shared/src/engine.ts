@@ -1,11 +1,12 @@
 // Section 2-5: the core rules-engine state machine. Pure reducer: (state, action, rng) -> state.
 // No I/O, no AI, no video -- per section 9 build order, this is Phase 1 in isolation.
-import type { GameAction, GameState, Player, WinReason } from "./types.js";
+import type { GameAction, GameState, Player, SpeechEvent, WinReason } from "./types.js";
 import { GameRuleError } from "./types.js";
 import { assignRoles, teamOf } from "./roles.js";
 import { freshDeck, drawPolicies } from "./deck.js";
 import { powerForSlot } from "./powers.js";
 import { shouldUnlockVeto } from "./veto.js";
+import { activeCaptureTrigger, captureAlreadyLogged } from "./capture.js";
 import {
   eligibleChancellorNominees,
   nextAlivePlayerClockwise,
@@ -54,6 +55,7 @@ export function createGame(id: string, code: string): GameState {
     pendingExecutiveResult: null,
     winner: null,
     winReason: null,
+    speechEvents: [],
     log: [],
   };
 }
@@ -500,6 +502,36 @@ export function reduce(state: GameState, action: GameAction, rng: () => number =
         return beginNextRound({ ...next, specialElectionNextPresidentId: null }, target);
       }
       return beginNextRound(next);
+    }
+
+    case "RECORD_SPEECH_EVENT": {
+      const capture = activeCaptureTrigger(state);
+      if (!capture) throw new GameRuleError("No active speech-capture moment right now.");
+      if (capture.eventType !== action.eventType) {
+        throw new GameRuleError(`Active capture moment is ${capture.eventType}, not ${action.eventType}.`);
+      }
+      if (capture.speakerId !== action.playerId) {
+        throw new GameRuleError("You are not the speaker for this capture moment.");
+      }
+      if (captureAlreadyLogged(state, capture)) {
+        throw new GameRuleError("This speech moment has already been recorded.");
+      }
+      const speaker = requirePlayer(state, action.playerId);
+      const event: SpeechEvent = {
+        id: `sp_${action.playerId}_${action.eventType}_${state.roundNumber}`,
+        playerId: action.playerId,
+        roundNumber: state.roundNumber,
+        eventType: action.eventType,
+        capturedAt: new Date().toISOString(),
+        durationMs: action.skipped ? null : action.durationMs,
+        skipped: action.skipped,
+        clipRef: null, // no clip upload yet -- see section 9 step 3 (Interhuman proxy)
+      };
+      const label = action.eventType.replace(/_/g, " ");
+      return withLog(
+        { ...state, speechEvents: [...state.speechEvents, event] },
+        action.skipped ? `${speaker.name} skipped their ${label}.` : `${speaker.name} recorded a ${label} clip.`,
+      );
     }
 
     default:

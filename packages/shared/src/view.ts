@@ -13,6 +13,7 @@ import type {
   WinningTeam,
 } from "./types.js";
 import { teamOf } from "./roles.js";
+import { activeCaptureTrigger, captureAlreadyLogged, type CaptureTrigger } from "./capture.js";
 
 export interface PublicPlayer {
   id: string;
@@ -73,6 +74,13 @@ export interface PlayerView {
   winReason: WinReason | null;
   finalRoles: Record<string, Role> | null; // revealed to everyone only at GAME_END
 
+  // Section 6: the active speech-capture moment, if any, and whether it's
+  // already been logged (recorded or skipped) this round. Who's expected to
+  // speak is public knowledge (like a spotlight at the table), so this is
+  // not redacted.
+  activeCapture: CaptureTrigger | null;
+  activeCaptureLogged: boolean;
+
   log: string[];
 }
 
@@ -113,6 +121,8 @@ export function viewForPlayer(state: GameState, viewerId: string): PlayerView {
     state.phase === "GAME_END"
       ? Object.fromEntries(state.players.map((p) => [p.id, p.role as Role]))
       : null;
+
+  const activeCapture = activeCaptureTrigger(state);
 
   return {
     gameId: state.id,
@@ -170,6 +180,9 @@ export function viewForPlayer(state: GameState, viewerId: string): PlayerView {
     winner: state.winner,
     winReason: state.winReason,
     finalRoles,
+
+    activeCapture,
+    activeCaptureLogged: activeCapture ? captureAlreadyLogged(state, activeCapture) : false,
 
     log: state.log,
   };

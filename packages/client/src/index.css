@@ -132,3 +132,25 @@ input {
 .final-roles li { padding: 0.3rem 0; border-bottom: 1px solid var(--border); }
 
 .app-footer { padding: 1rem 1.5rem; text-align: right; }
+
+.capture-panel {
+  margin: 1rem 0;
+  padding: 0.9rem 1rem;
+  border: 1px dashed var(--accent);
+  border-radius: var(--radius);
+  background: rgba(201, 162, 39, 0.06);
+}
+.capture-panel.bystander { border-style: solid; border-color: var(--border); background: transparent; }
+.capture-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent); }
+.capture-panel.bystander .capture-label { color: var(--text-dim); }
+.capture-actions { display: flex; gap: 0.6rem; margin-top: 0.6rem; }
+.capture-preview {
+  display: block;
+  width: 100%;
+  max-width: 320px;
+  margin: 0.6rem 0;
+  border-radius: var(--radius);
+  background: #000;
+  transform: scaleX(-1); /* mirror the self-preview like a front camera */
+}
+.capture-preview[controls] { transform: none; } /* played-back clip shouldn't be mirrored */

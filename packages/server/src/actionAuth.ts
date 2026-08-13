@@ -11,6 +11,7 @@ export function actorIdOf(action: GameAction): string | null {
     case "SET_CONNECTED":
     case "ACKNOWLEDGE_ROLE":
     case "CAST_VOTE":
+    case "RECORD_SPEECH_EVENT":
       return action.playerId;
     case "NOMINATE_CHANCELLOR":
     case "PRESIDENT_DISCARD":

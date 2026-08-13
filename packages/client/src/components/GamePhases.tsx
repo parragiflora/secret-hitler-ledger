@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { GameAction, PlayerView, PolicyType } from "@interhuman/shared";
 import { eligibleNomineeIds } from "../eligibility";
+import { CapturePanel } from "./CapturePanel";
 
 type Send = (action: GameAction) => void;
 function nameOf(view: PlayerView, id: string | null): string {
@@ -62,12 +63,16 @@ export function RoleReveal({ view, send }: { view: PlayerView; send: Send }) {
 export function Nomination({ view, send }: { view: PlayerView; send: Send }) {
   const isPresident = view.myId === view.presidentId;
   const eligible = eligibleNomineeIds(view);
+  // nomination_speech is required (section 6) -- prompt for it by holding off
+  // the nominee picker until it's recorded or explicitly skipped.
+  const captureBlocking = Boolean(view.activeCapture?.required) && !view.activeCaptureLogged;
 
   if (!isPresident) {
     return (
       <div className="panel">
         <h2>Nomination</h2>
         <p>President {nameOf(view, view.presidentId)} is nominating a Chancellor...</p>
+        <CapturePanel view={view} send={send} />
       </div>
     );
   }
@@ -75,16 +80,21 @@ export function Nomination({ view, send }: { view: PlayerView; send: Send }) {
   return (
     <div className="panel">
       <h2>Nominate a Chancellor</h2>
-      <div className="choice-grid">
-        {eligible.map((id) => (
-          <button
-            key={id}
-            onClick={() => send({ type: "NOMINATE_CHANCELLOR", presidentId: view.myId, nomineeId: id })}
-          >
-            {nameOf(view, id)}
-          </button>
-        ))}
-      </div>
+      <CapturePanel view={view} send={send} />
+      {captureBlocking ? (
+        <p className="hint">Record (or skip) your nomination speech to continue.</p>
+      ) : (
+        <div className="choice-grid">
+          {eligible.map((id) => (
+            <button
+              key={id}
+              onClick={() => send({ type: "NOMINATE_CHANCELLOR", presidentId: view.myId, nomineeId: id })}
+            >
+              {nameOf(view, id)}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -120,6 +130,7 @@ export function ElectionVote({ view, send }: { view: PlayerView; send: Send }) {
           {view.lastVoteResult.passed ? "passed" : "failed"})
         </p>
       )}
+      <CapturePanel view={view} send={send} />
     </div>
   );
 }
@@ -210,13 +221,17 @@ export function VetoResponsePanel({ view, send }: { view: PlayerView; send: Send
 
 export function PolicyDefensePanel({ view, send }: { view: PlayerView; send: Send }) {
   const isChancellor = view.myId === view.chancellorId;
+  const captureBlocking = Boolean(view.activeCapture?.required) && !view.activeCaptureLogged;
   return (
     <div className="panel">
       <h2>Policy Enacted</h2>
       <PolicyCard type={view.lastEnactedPolicy!} />
       <p className="hint">Chancellor {nameOf(view, view.chancellorId)} defends the decision.</p>
+      <CapturePanel view={view} send={send} />
       {isChancellor && (
-        <button onClick={() => send({ type: "ACKNOWLEDGE_POLICY_DEFENSE", chancellorId: view.myId })}>Continue</button>
+        <button disabled={captureBlocking} onClick={() => send({ type: "ACKNOWLEDGE_POLICY_DEFENSE", chancellorId: view.myId })}>
+          Continue
+        </button>
       )}
     </div>
   );
@@ -237,6 +252,7 @@ export function ExecutiveActionPanel({ view, send }: { view: PlayerView; send: S
           <h2>Investigation Result</h2>
           <p>Party membership: <strong>{view.myExecutiveResult.team}</strong></p>
           <p className="hint">Only you can see this. You may report it truthfully -- or lie.</p>
+          <CapturePanel view={view} send={send} />
           {isPresident && (
             <button onClick={() => send({ type: "ACKNOWLEDGE_EXECUTIVE_ACTION", presidentId: view.myId })}>Continue</button>
           )}
@@ -337,6 +353,7 @@ export function ExecutiveActionPanel({ view, send }: { view: PlayerView; send: S
         <div className="panel">
           <h2>Execution</h2>
           <p>{nameOf(view, view.pendingExecutionTargetId)} is about to be executed.</p>
+          <CapturePanel view={view} send={send} />
           {isPresident && (
             <button onClick={() => send({ type: "ACKNOWLEDGE_EXECUTIVE_ACTION", presidentId: view.myId })}>Confirm</button>
           )}

@@ -1,4 +1,5 @@
 export * from "./types.js";
+export * from "./capture.js";
 export * from "./roles.js";
 export * from "./deck.js";
 export * from "./powers.js";

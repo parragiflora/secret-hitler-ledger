@@ -1,8 +1,8 @@
 // Core domain types for the Secret Hitler rules engine.
-// Mirrors the data model in section 8 of secret-hitler-ledger-spec.md, scoped to
-// Phase 1 (sections 1-5: full rules engine, no AI/video). Fields that exist purely
-// to support later phases (speech capture, signal scores, trust trajectory,
-// special sessions) are intentionally NOT modeled yet — see section 9 build order.
+// Mirrors the data model in section 8 of secret-hitler-ledger-spec.md. Covers
+// Phase 1 (sections 1-5: full rules engine) and Phase 2 (section 6: capture
+// start/stop hooks tied to phase transitions, logged as speechEvents -- no
+// clip upload, Interhuman proxy, or signal scoring yet, see section 9 step 3).
 
 export type Role = "liberal" | "fascist" | "hitler";
 export type Team = "liberal" | "fascist";
@@ -58,6 +58,28 @@ export interface VetoAttempt {
   round: number;
   proposedBy: string; // chancellor id
   presidentResponse: "accepted" | "rejected" | null;
+}
+
+// Section 6: the five deterministic speech-capture moments.
+export type SpeechEventType =
+  | "nomination_speech"
+  | "acceptance_speech"
+  | "policy_defense"
+  | "investigation_announcement"
+  | "last_words";
+
+export interface SpeechEvent {
+  id: string;
+  playerId: string; // the speaker
+  roundNumber: number;
+  eventType: SpeechEventType;
+  capturedAt: string; // ISO timestamp
+  durationMs: number | null; // null if skipped
+  skipped: boolean;
+  // Placeholder for the future Interhuman proxy (section 9 step 3) -- Phase 2
+  // wires the start/stop capture hooks and this event log only, no clip
+  // upload or signal scoring yet.
+  clipRef: string | null;
 }
 
 export type WinningTeam = Team | null;
@@ -123,6 +145,8 @@ export interface GameState {
   winner: WinningTeam;
   winReason: WinReason | null;
 
+  speechEvents: SpeechEvent[]; // section 6 capture log
+
   log: string[]; // human-readable public event log (drives the "simple buttons/text" UI)
 }
 
@@ -143,7 +167,14 @@ export type GameAction =
   | { type: "EXECUTIVE_SPECIAL_ELECTION"; presidentId: string; targetId: string }
   | { type: "EXECUTIVE_POLICY_PEEK"; presidentId: string }
   | { type: "EXECUTIVE_EXECUTION"; presidentId: string; targetId: string }
-  | { type: "ACKNOWLEDGE_EXECUTIVE_ACTION"; presidentId: string };
+  | { type: "ACKNOWLEDGE_EXECUTIVE_ACTION"; presidentId: string }
+  | {
+      type: "RECORD_SPEECH_EVENT";
+      playerId: string;
+      eventType: SpeechEventType;
+      durationMs: number | null;
+      skipped: boolean;
+    };
 
 export class GameRuleError extends Error {
   constructor(message: string) {
