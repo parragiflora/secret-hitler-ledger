@@ -42,9 +42,18 @@ function PhasePanel({ view, send }: { view: NonNullable<ReturnType<typeof useGam
 }
 
 export default function App() {
-  const { view, error, connecting, connect, sendAction, leaveSession } = useGame();
+  const { view, error, connecting, reconnecting, connect, sendAction, leaveSession } = useGame();
 
   if (!view) {
+    if (reconnecting) {
+      return (
+        <div className="app-shell">
+          <div className="join-screen">
+            <p className="hint">Reconnecting to your game...</p>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="app-shell">
         <JoinScreen connecting={connecting} error={error} onJoin={connect} />

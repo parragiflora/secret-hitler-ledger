@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { createRoom } from "../useGame";
+import { useMemo, useState } from "react";
+import { createRoom, storedSeatFor } from "../useGame";
 
 export function JoinScreen({
   connecting,
@@ -14,6 +14,10 @@ export function JoinScreen({
   const [code, setCode] = useState("");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+
+  // If this browser already holds a seat in the room code as typed, offer a
+  // one-click rejoin instead of demanding a name for a seat it already has.
+  const seat = useMemo(() => storedSeatFor(code), [code]);
 
   async function handleCreate() {
     if (!name.trim()) {
@@ -34,7 +38,8 @@ export function JoinScreen({
 
   function handleJoin(e: React.FormEvent) {
     e.preventDefault();
-    if (!name.trim() || !code.trim()) return;
+    if (!code.trim()) return;
+    if (!seat && !name.trim()) return; // name only required for a brand-new seat
     onJoin(code.trim().toUpperCase(), name.trim());
   }
 
@@ -46,7 +51,13 @@ export function JoinScreen({
       <form onSubmit={handleJoin} className="join-form">
         <label>
           Your name
-          <input value={name} onChange={(e) => setName(e.target.value)} maxLength={24} placeholder="Alice" />
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            maxLength={24}
+            placeholder={seat ? seat.name : "Alice"}
+            disabled={Boolean(seat)}
+          />
         </label>
 
         <label>
@@ -59,8 +70,14 @@ export function JoinScreen({
           />
         </label>
 
+        {seat && (
+          <p className="hint">
+            You already have a seat here as <strong>{seat.name}</strong> -- rejoin below.
+          </p>
+        )}
+
         <button type="submit" disabled={connecting}>
-          Join Game
+          {seat ? `Rejoin as ${seat.name}` : "Join Game"}
         </button>
       </form>
 

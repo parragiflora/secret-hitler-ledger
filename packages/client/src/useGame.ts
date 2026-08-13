@@ -8,10 +8,49 @@ interface StoredSession {
   code: string;
   playerId: string;
   token: string;
+  name: string;
 }
 
+// One session per room code (so a browser can hold seats in several rooms
+// over time), plus a pointer to whichever room was most recently active so a
+// fresh page load can silently rejoin it without the player re-entering
+// anything (the actual reconnect gap this module fixes).
+const LAST_ROOM_KEY = "secret-hitler-last-room";
 function sessionKey(code: string): string {
   return `secret-hitler-session-${code.toUpperCase()}`;
+}
+
+function getStoredSession(code: string): StoredSession | null {
+  const raw = localStorage.getItem(sessionKey(code));
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as StoredSession;
+  } catch {
+    return null;
+  }
+}
+
+function saveStoredSession(session: StoredSession): void {
+  localStorage.setItem(sessionKey(session.code), JSON.stringify(session));
+  localStorage.setItem(LAST_ROOM_KEY, session.code);
+}
+
+function clearStoredSession(code: string): void {
+  localStorage.removeItem(sessionKey(code));
+  if (localStorage.getItem(LAST_ROOM_KEY)?.toUpperCase() === code.toUpperCase()) {
+    localStorage.removeItem(LAST_ROOM_KEY);
+  }
+}
+
+function getLastRoomCode(): string | null {
+  return localStorage.getItem(LAST_ROOM_KEY);
+}
+
+/** Does this browser already hold a seat in `code`? Lets the join screen offer a one-click rejoin. */
+export function storedSeatFor(code: string): { name: string } | null {
+  if (!code.trim()) return null;
+  const s = getStoredSession(code);
+  return s ? { name: s.name } : null;
 }
 
 export async function createRoom(): Promise<string> {
@@ -25,6 +64,7 @@ export interface UseGame {
   view: PlayerView | null;
   error: string | null;
   connecting: boolean;
+  reconnecting: boolean;
   connect: (code: string, name?: string) => void;
   sendAction: (action: GameAction) => void;
   leaveSession: (code: string) => void;
@@ -34,43 +74,56 @@ export function useGame(): UseGame {
   const [view, setView] = useState<PlayerView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
+  const [reconnecting, setReconnecting] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
 
-  const connect = useCallback((code: string, name?: string) => {
-    setConnecting(true);
+  const connect = useCallback((code: string, name?: string, silent = false) => {
+    if (silent) setReconnecting(true);
+    else setConnecting(true);
     setError(null);
     const ws = new WebSocket(SERVER_WS);
     wsRef.current = ws;
 
+    // A stored session for this room always wins over a freshly typed name --
+    // that's what lets a reloaded/rejoined tab resume its seat mid-game
+    // instead of attempting (and failing) a brand-new JOIN_GAME once the
+    // lobby has already started.
+    const stored = getStoredSession(code);
+
     ws.onopen = () => {
-      const stored = localStorage.getItem(sessionKey(code));
-      if (stored && !name) {
-        const s: StoredSession = JSON.parse(stored);
-        const hello: ClientMessage = { type: "HELLO", code, playerId: s.playerId, token: s.token };
-        ws.send(JSON.stringify(hello));
-      } else {
-        const hello: ClientMessage = { type: "HELLO", code, name };
-        ws.send(JSON.stringify(hello));
-      }
+      const hello: ClientMessage = stored
+        ? { type: "HELLO", code, playerId: stored.playerId, token: stored.token }
+        : { type: "HELLO", code, name };
+      ws.send(JSON.stringify(hello));
     };
 
     ws.onmessage = (ev) => {
       const msg: ServerMessage = JSON.parse(ev.data as string);
       if (msg.type === "WELCOME") {
-        const session: StoredSession = { code, playerId: msg.playerId, token: msg.token };
-        localStorage.setItem(sessionKey(code), JSON.stringify(session));
+        saveStoredSession({ code, playerId: msg.playerId, token: msg.token, name: stored?.name ?? name ?? "" });
         setView(msg.view);
         setConnecting(false);
+        setReconnecting(false);
       } else if (msg.type === "STATE") {
         setView(msg.view);
       } else if (msg.type === "ERROR") {
-        setError(msg.message);
+        // A stale/invalid reconnect (room gone, token no longer valid) should
+        // fall back to a fresh join next time, not keep retrying the same
+        // broken session.
+        if (stored) clearStoredSession(code);
+        if (!silent) setError(msg.message);
         setConnecting(false);
+        setReconnecting(false);
       }
     };
 
-    ws.onerror = () => setError("Connection error -- is the server running?");
-    ws.onclose = () => setConnecting(false);
+    ws.onerror = () => {
+      if (!silent) setError("Connection error -- is the server running?");
+    };
+    ws.onclose = () => {
+      setConnecting(false);
+      setReconnecting(false);
+    };
   }, []);
 
   const sendAction = useCallback((action: GameAction) => {
@@ -83,12 +136,22 @@ export function useGame(): UseGame {
   }, []);
 
   const leaveSession = useCallback((code: string) => {
-    localStorage.removeItem(sessionKey(code));
+    clearStoredSession(code);
     wsRef.current?.close();
     setView(null);
   }, []);
 
+  // Silently resume the most recently active room on load, if this browser
+  // holds a seat in one -- the fix for "reload/rejoin a tab mid-game".
+  useEffect(() => {
+    const lastCode = getLastRoomCode();
+    if (lastCode && getStoredSession(lastCode)) {
+      connect(lastCode, undefined, true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => () => wsRef.current?.close(), []);
 
-  return { view, error, connecting, connect, sendAction, leaveSession };
+  return { view, error, connecting, reconnecting, connect, sendAction, leaveSession };
 }
