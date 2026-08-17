@@ -69,3 +69,15 @@ export function captureAlreadyLogged(state: GameState, capture: CaptureTrigger):
     (e) => e.playerId === capture.speakerId && e.eventType === capture.eventType && e.roundNumber === state.roundNumber,
   );
 }
+
+/**
+ * Deterministic id for a speech event -- (player, eventType, round) already
+ * uniquely identifies a capture moment, so no random id generation is
+ * needed. The engine uses this to write speechEvents rows; the client uses
+ * the exact same function to predict the id ahead of time so it can
+ * correlate an uploaded clip (section 9 step 3) with the right event
+ * without waiting on a server round-trip.
+ */
+export function speechEventId(playerId: string, eventType: SpeechEventType, roundNumber: number): string {
+  return `sp_${playerId}_${eventType}_${roundNumber}`;
+}

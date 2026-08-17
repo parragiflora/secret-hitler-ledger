@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import type { GameAction, PlayerView, SpeechEventType } from "@interhuman/shared";
+import { speechEventId, type GameAction, type PlayerView, type SpeechEventType } from "@interhuman/shared";
 import { useCapture } from "../useCapture";
+import { uploadClip } from "../useGame";
 
 type Send = (action: GameAction) => void;
 
@@ -16,16 +17,20 @@ const LABELS: Record<SpeechEventType, string> = {
  * Section 6: renders the active speech-capture moment, if any. Self-guards --
  * renders nothing if there's no active moment or it's already been logged.
  * Non-speakers see a passive "X is speaking" note; the speaker gets record/
- * stop/skip controls. Phase 2 scope: local start/stop only, no upload.
+ * stop/skip controls. On submit, the clip is uploaded for analysis (section
+ * 9 step 3) as a fire-and-forget call -- it never blocks game progression,
+ * and the analyzed scores are never shown here (or anywhere outside a
+ * Special Session's readout, a later phase).
  */
 export function CapturePanel({ view, send }: { view: PlayerView; send: Send }) {
   const capture = view.activeCapture;
   const isSpeaker = capture?.speakerId === view.myId;
-  const { status, elapsedSec, error, stream, previewUrl, start, stop, skip, reset } = useCapture(
+  const { status, elapsedSec, error, stream, previewUrl, blob, start, stop, skip, reset } = useCapture(
     capture?.maxDurationSec ?? 30,
   );
   const videoRef = useRef<HTMLVideoElement>(null);
   const [confirmingSkip, setConfirmingSkip] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState<"idle" | "uploading" | "sent" | "failed">("idle");
 
   useEffect(() => {
     if (videoRef.current) videoRef.current.srcObject = stream;
@@ -36,18 +41,22 @@ export function CapturePanel({ view, send }: { view: PlayerView; send: Send }) {
   useEffect(() => {
     reset();
     setConfirmingSkip(false);
+    setUploadStatus("idle");
   }, [capture?.eventType, capture?.speakerId, view.roundNumber]);
 
   if (!capture || view.activeCaptureLogged) return null;
 
   function submit(skipped: boolean) {
-    send({
-      type: "RECORD_SPEECH_EVENT",
-      playerId: view.myId,
-      eventType: capture!.eventType,
-      durationMs: skipped ? null : elapsedSec * 1000,
-      skipped,
-    });
+    const durationMs = skipped ? null : elapsedSec * 1000;
+    send({ type: "RECORD_SPEECH_EVENT", playerId: view.myId, eventType: capture!.eventType, durationMs, skipped });
+
+    if (!skipped && blob) {
+      const eventId = speechEventId(view.myId, capture!.eventType, view.roundNumber);
+      setUploadStatus("uploading");
+      uploadClip(view.code, eventId, blob).then((result) => {
+        setUploadStatus(result.ok ? "sent" : "failed");
+      });
+    }
   }
 
   const speakerName = view.players.find((p) => p.id === capture.speakerId)?.name ?? "?";
@@ -124,12 +133,20 @@ export function CapturePanel({ view, send }: { view: PlayerView; send: Send }) {
             <video src={previewUrl} controls className="capture-preview" />
           )}
           <p className="hint">Captured {elapsedSec}s.</p>
-          <div className="capture-actions">
-            <button onClick={() => submit(false)}>Submit</button>
-            <button className="secondary" onClick={reset}>
-              Redo
-            </button>
-          </div>
+          {uploadStatus === "idle" ? (
+            <div className="capture-actions">
+              <button onClick={() => submit(false)}>Submit</button>
+              <button className="secondary" onClick={reset}>
+                Redo
+              </button>
+            </div>
+          ) : (
+            <p className="hint">
+              {uploadStatus === "uploading" && "Sending to The Registrar..."}
+              {uploadStatus === "sent" && "Sent to The Registrar."}
+              {uploadStatus === "failed" && "Recorded, but the upload didn't go through."}
+            </p>
+          )}
         </div>
       )}
 

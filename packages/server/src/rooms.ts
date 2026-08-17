@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { WebSocket } from "ws";
 import { createGame, type GameState } from "@interhuman/shared";
+import type { SignalScores } from "./interhuman.js";
 
 // Avoid visually ambiguous characters (0/O, 1/I) in room codes.
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -10,6 +11,11 @@ export interface Room {
   state: GameState;
   tokens: Map<string, string>; // playerId -> reconnect token
   sockets: Map<string, WebSocket>; // playerId -> live socket
+  // Section 9 step 3: analyzed signal scores per speechEvent id. Kept outside
+  // GameState/the engine reducer on purpose -- analysis is async I/O against
+  // an external API, not deterministic game-rule state, so it doesn't belong
+  // in the pure, synchronous, unit-testable reducer.
+  signalScores: Map<string, SignalScores>;
 }
 
 const rooms = new Map<string, Room>();
@@ -29,6 +35,7 @@ export function createRoom(): Room {
     state: createGame(randomUUID(), code),
     tokens: new Map(),
     sockets: new Map(),
+    signalScores: new Map(),
   };
   rooms.set(code, room);
   return room;

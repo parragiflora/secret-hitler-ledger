@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-// Section 6 / Phase 2 scope: start/stop recording hooks only. The clip stays
-// local to the browser (previewUrl, for a quick "yes it recorded" confirmation)
-// -- nothing is uploaded or analyzed yet. See section 9 step 3 (Interhuman proxy).
+// Section 6 start/stop recording hooks. The recorded Blob is exposed
+// (alongside a local previewUrl for a quick "yes it recorded" confirmation)
+// so the caller can upload it for analysis -- see section 9 step 3
+// (Interhuman proxy), wired in CapturePanel.tsx.
 
 export type CaptureStatus = "idle" | "requesting" | "recording" | "stopped" | "skipped" | "denied";
 
@@ -12,6 +13,7 @@ export interface UseCaptureResult {
   error: string | null;
   stream: MediaStream | null;
   previewUrl: string | null;
+  blob: Blob | null;
   start: () => Promise<void>;
   stop: () => void;
   skip: () => void;
@@ -24,6 +26,7 @@ export function useCapture(maxDurationSec: number): UseCaptureResult {
   const [error, setError] = useState<string | null>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [blob, setBlob] = useState<Blob | null>(null);
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -61,8 +64,9 @@ export function useCapture(maxDurationSec: number): UseCaptureResult {
       };
       recorder.onstop = () => {
         if (!skippedRef.current && chunksRef.current.length > 0) {
-          const blob = new Blob(chunksRef.current, { type: recorder.mimeType || "video/webm" });
-          setPreviewUrl(URL.createObjectURL(blob));
+          const recordedBlob = new Blob(chunksRef.current, { type: recorder.mimeType || "video/webm" });
+          setBlob(recordedBlob);
+          setPreviewUrl(URL.createObjectURL(recordedBlob));
         }
       };
       recorderRef.current = recorder;
@@ -108,6 +112,7 @@ export function useCapture(maxDurationSec: number): UseCaptureResult {
     clearTimer();
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     setPreviewUrl(null);
+    setBlob(null);
     setStatus("idle");
     setElapsedSec(0);
     setError(null);
@@ -122,5 +127,5 @@ export function useCapture(maxDurationSec: number): UseCaptureResult {
     [],
   );
 
-  return { status, elapsedSec, error, stream, previewUrl, start, stop, skip, reset };
+  return { status, elapsedSec, error, stream, previewUrl, blob, start, stop, skip, reset };
 }

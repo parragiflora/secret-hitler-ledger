@@ -6,7 +6,7 @@ import { assignRoles, teamOf } from "./roles.js";
 import { freshDeck, drawPolicies } from "./deck.js";
 import { powerForSlot } from "./powers.js";
 import { shouldUnlockVeto } from "./veto.js";
-import { activeCaptureTrigger, captureAlreadyLogged } from "./capture.js";
+import { activeCaptureTrigger, captureAlreadyLogged, speechEventId } from "./capture.js";
 import {
   eligibleChancellorNominees,
   nextAlivePlayerClockwise,
@@ -518,7 +518,7 @@ export function reduce(state: GameState, action: GameAction, rng: () => number =
       }
       const speaker = requirePlayer(state, action.playerId);
       const event: SpeechEvent = {
-        id: `sp_${action.playerId}_${action.eventType}_${state.roundNumber}`,
+        id: speechEventId(action.playerId, action.eventType, state.roundNumber),
         playerId: action.playerId,
         roundNumber: state.roundNumber,
         eventType: action.eventType,

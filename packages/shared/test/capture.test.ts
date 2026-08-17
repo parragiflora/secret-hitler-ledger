@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activeCaptureTrigger, captureAlreadyLogged } from "../src/capture.js";
+import { activeCaptureTrigger, captureAlreadyLogged, speechEventId } from "../src/capture.js";
 import type { GameState, Role, SpeechEvent } from "../src/types.js";
 import { makeStateWithRoles } from "./testUtils.js";
 
@@ -106,5 +106,14 @@ describe("captureAlreadyLogged", () => {
     };
     const s: GameState = { ...state, speechEvents: [event] };
     expect(captureAlreadyLogged(s, trigger)).toBe(true);
+  });
+});
+
+describe("speechEventId", () => {
+  it("is deterministic and distinct per (player, eventType, round)", () => {
+    expect(speechEventId("p0", "nomination_speech", 1)).toBe(speechEventId("p0", "nomination_speech", 1));
+    expect(speechEventId("p0", "nomination_speech", 1)).not.toBe(speechEventId("p1", "nomination_speech", 1));
+    expect(speechEventId("p0", "nomination_speech", 1)).not.toBe(speechEventId("p0", "policy_defense", 1));
+    expect(speechEventId("p0", "nomination_speech", 1)).not.toBe(speechEventId("p0", "nomination_speech", 2));
   });
 });

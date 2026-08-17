@@ -53,6 +53,31 @@ export function storedSeatFor(code: string): { name: string } | null {
   return s ? { name: s.name } : null;
 }
 
+/**
+ * Uploads a recorded speech clip for analysis (section 9 step 3). Fire-and-
+ * forget from the caller's perspective -- never blocks game progression, and
+ * silently no-ops if this browser has no session for the room (shouldn't
+ * happen in practice, since you can only be recording your own speech).
+ */
+export async function uploadClip(code: string, speechEventId: string, blob: Blob): Promise<{ ok: boolean; mocked?: boolean }> {
+  const session = getStoredSession(code);
+  if (!session) return { ok: false };
+  const form = new FormData();
+  form.append("clip", blob, "clip.webm");
+  try {
+    const res = await fetch(`${SERVER_HTTP}/api/games/${code}/speech-events/${speechEventId}/clip`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${session.token}` },
+      body: form,
+    });
+    if (!res.ok) return { ok: false };
+    const data = (await res.json()) as { ok: boolean; mocked?: boolean };
+    return data;
+  } catch {
+    return { ok: false };
+  }
+}
+
 export async function createRoom(): Promise<string> {
   const res = await fetch(`${SERVER_HTTP}/api/games`, { method: "POST" });
   if (!res.ok) throw new Error("Could not reach the server to create a game.");
