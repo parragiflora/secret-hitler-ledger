@@ -45,7 +45,7 @@ export function JoinScreen({
 
   return (
     <div className="join-screen">
-      <h1>Secret Hitler + The Ledger</h1>
+      <h1>Secret Hitler</h1>
       <p className="tagline">The Registrar is watching.</p>
 
       <form onSubmit={handleJoin} className="join-form">

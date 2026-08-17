@@ -1,4 +1,8 @@
+@import url("https://fonts.googleapis.com/css2?family=Anton&family=Barlow:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&display=swap");
+
 :root {
+  /* Dark "surveillance noir" ground, poster-poster accent colors lifted
+     from the physical Secret Hitler box (burnt coral, ivory, ink black). */
   --bg: #14171c;
   --panel: #1d2129;
   --panel-2: #242933;
@@ -8,9 +12,12 @@
   --liberal: #3d7bd9;
   --fascist: #b0342d;
   --hitler: #7a1f1a;
-  --accent: #c9a227;
+  --accent: #e8674a; /* poster coral-orange */
+  --accent-ink: #1a1108; /* text sitting on top of --accent */
+  --cream: #f0e4c8; /* poster ivory, used sparingly for stamped highlights */
   --danger: #b0342d;
-  --radius: 8px;
+  --radius: 6px;
+  --display-font: "Anton", "Arial Narrow", sans-serif;
   color-scheme: dark;
 }
 
@@ -20,37 +27,64 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: "Georgia", "Iowan Old Style", serif;
+  font-family: "Barlow", "Helvetica Neue", Arial, sans-serif;
 }
 
 #root { min-height: 100vh; }
 
+h1, h2, h3 {
+  font-family: var(--display-font);
+  font-weight: 400; /* Anton is already heavy at 400 */
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
 button {
-  font-family: inherit;
-  font-size: 0.95rem;
-  padding: 0.55rem 1rem;
+  font-family: "Barlow", "Helvetica Neue", Arial, sans-serif;
+  font-weight: 600;
+  font-size: 0.9rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  padding: 0.6rem 1.1rem;
   border-radius: var(--radius);
-  border: 1px solid var(--border);
+  border: 2px solid var(--border);
   background: var(--panel-2);
   color: var(--text);
   cursor: pointer;
+  transition: border-color 0.15s, transform 0.1s;
 }
 button:hover:not(:disabled) { border-color: var(--accent); }
+button:active:not(:disabled) { transform: translateY(1px); }
 button:disabled { opacity: 0.5; cursor: default; }
 button.secondary { background: transparent; }
-button.link { background: none; border: none; text-decoration: underline; color: var(--text-dim); }
+button.link { background: none; border: none; text-decoration: underline; color: var(--text-dim); text-transform: none; font-weight: 400; letter-spacing: normal; }
 button.danger { border-color: var(--fascist); }
 button.ja { background: #234a2c; border-color: #3c8451; }
 button.nein { background: #4a2323; border-color: #843c3c; }
 
+/* The one clearly "brand" button on each screen -- primary calls to action
+   get the poster's coral fill instead of the neutral panel gray. */
+.join-screen > button.secondary,
+.join-form button[type="submit"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 700;
+}
+.join-screen > button.secondary:hover:not(:disabled),
+.join-form button[type="submit"]:hover:not(:disabled) {
+  border-color: var(--cream);
+}
+
 input {
-  font-family: inherit;
-  padding: 0.5rem 0.6rem;
+  font-family: "Barlow", "Helvetica Neue", Arial, sans-serif;
+  padding: 0.55rem 0.7rem;
   border-radius: var(--radius);
-  border: 1px solid var(--border);
+  border: 2px solid var(--border);
   background: var(--panel-2);
   color: var(--text);
 }
+input:focus { outline: none; border-color: var(--accent); }
 
 .app-shell { min-height: 100vh; display: flex; flex-direction: column; }
 
@@ -60,32 +94,65 @@ input {
   padding: 2rem;
   text-align: center;
 }
-.join-screen h1 { font-size: 1.6rem; margin-bottom: 0.2rem; }
-.tagline { color: var(--text-dim); font-style: italic; margin-top: 0; }
+.join-screen h1 {
+  font-size: 3rem;
+  margin-bottom: 0.1rem;
+  color: var(--cream);
+  text-shadow: 3px 3px 0 var(--accent);
+}
+.tagline { color: var(--text-dim); font-style: italic; margin-top: 0; font-family: "Barlow", sans-serif; text-transform: none; letter-spacing: normal; }
 .join-form { display: flex; flex-direction: column; gap: 1rem; margin: 1.5rem 0; text-align: left; }
-.join-form label { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.85rem; color: var(--text-dim); }
-.divider { color: var(--text-dim); margin: 0.5rem 0; }
+.join-form label { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.8rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
+.divider { color: var(--text-dim); margin: 0.5rem 0; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.08em; }
 .error { color: #ff8a80; margin-top: 1rem; }
 
 .board-header {
-  border-bottom: 1px solid var(--border);
+  border-bottom: 3px solid var(--accent);
   padding: 0.9rem 1.5rem;
   background: var(--panel);
 }
-.brand { font-size: 1.1rem; letter-spacing: 0.02em; display: flex; align-items: center; gap: 0.6rem; }
-.brand-mark { color: var(--accent); }
-.room-code { margin-left: auto; font-size: 0.8rem; color: var(--text-dim); }
-.tracks { display: flex; gap: 2rem; margin-top: 0.6rem; flex-wrap: wrap; }
+.brand {
+  font-family: var(--display-font);
+  font-size: 1.3rem;
+  letter-spacing: 0.03em;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--cream);
+}
+.brand-mark { color: var(--accent); font-size: 1rem; }
+.room-code {
+  margin-left: auto;
+  font-family: "Barlow", sans-serif;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--bg);
+  background: var(--accent);
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+}
+.tracks { display: flex; gap: 2rem; margin-top: 0.7rem; flex-wrap: wrap; }
 .track { display: flex; flex-direction: column; gap: 0.25rem; }
-.track-label { font-size: 0.75rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; }
+.track-label { font-size: 0.7rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
 .track-slots { display: flex; gap: 0.3rem; }
-.slot { width: 22px; height: 22px; border-radius: 4px; border: 1px solid var(--border); background: var(--panel-2); }
+.slot { width: 22px; height: 22px; border-radius: 3px; border: 2px solid var(--border); background: var(--panel-2); }
 .slot.filled { background: var(--liberal); border-color: var(--liberal); }
 .tracks .track:nth-child(2) .slot.filled { background: var(--fascist); border-color: var(--fascist); }
-.dot { width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--border); background: var(--panel-2); }
+.dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--border); background: var(--panel-2); }
 .dot.filled { background: var(--accent); border-color: var(--accent); }
 .meta { margin-top: 0.6rem; font-size: 0.8rem; color: var(--text-dim); display: flex; gap: 0.8rem; align-items: center; }
-.badge { background: var(--accent); color: #1a1a1a; padding: 0.1rem 0.5rem; border-radius: 999px; font-size: 0.7rem; }
+.badge {
+  background: var(--accent);
+  color: var(--accent-ink);
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
 
 .tension-indicator { display: inline-flex; align-items: center; gap: 0.4rem; margin-left: auto; font-style: italic; }
 .tension-dot { width: 8px; height: 8px; border-radius: 50%; background: #3c8451; }
@@ -97,39 +164,57 @@ input {
   .layout { grid-template-columns: 1fr; }
 }
 
-.roster, .event-log { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; }
-.roster h3, .event-log h3 { margin-top: 0; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); }
+.roster, .event-log { background: var(--panel); border: 2px solid var(--border); border-radius: var(--radius); padding: 1rem; }
+.roster h3, .event-log h3 { margin-top: 0; font-size: 0.85rem; color: var(--accent); }
 .roster ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
 .roster li { display: flex; align-items: center; gap: 0.4rem; font-size: 0.9rem; flex-wrap: wrap; }
 .roster li.dead { opacity: 0.5; text-decoration: line-through; }
-.roster .you { color: var(--accent); font-size: 0.75rem; }
+.roster .you { color: var(--accent); font-size: 0.7rem; font-weight: 700; text-transform: uppercase; }
 .roster .offline, .roster .dead-label { font-size: 0.7rem; color: var(--text-dim); }
-.known-role { font-size: 0.65rem; padding: 0.05rem 0.4rem; border-radius: 999px; border: 1px solid var(--border); text-transform: uppercase; }
+.known-role { font-size: 0.65rem; padding: 0.05rem 0.45rem; border-radius: 999px; border: 2px solid var(--border); text-transform: uppercase; font-weight: 700; }
 .known-role.fascist, .known-role.hitler { border-color: var(--fascist); color: #ff8a80; }
 
 .event-log ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column-reverse; gap: 0.5rem; }
-.event-log li { font-size: 0.82rem; color: var(--text-dim); border-left: 2px solid var(--border); padding-left: 0.5rem; }
+.event-log li { font-size: 0.82rem; color: var(--text-dim); border-left: 3px solid var(--accent); padding-left: 0.5rem; }
 
 .main-panel { display: flex; flex-direction: column; gap: 1rem; }
-.your-role { background: var(--panel-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 0.6rem 1rem; font-size: 0.85rem; }
+.your-role { background: var(--panel-2); border: 2px solid var(--border); border-radius: var(--radius); padding: 0.6rem 1rem; font-size: 0.85rem; }
 .allies { color: var(--text-dim); margin-top: 0.2rem; }
 
-.panel { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.5rem; }
-.panel h2 { margin-top: 0; }
-.hint { color: var(--text-dim); font-size: 0.85rem; }
+.panel { background: var(--panel); border: 2px solid var(--border); border-radius: var(--radius); padding: 1.5rem; }
+.panel h2 { margin-top: 0; font-size: 1.3rem; color: var(--cream); }
+.hint { color: var(--text-dim); font-size: 0.85rem; text-transform: none; }
 
-.role-badge { display: inline-block; padding: 0.4rem 1rem; border-radius: var(--radius); font-weight: bold; letter-spacing: 0.05em; margin-bottom: 0.8rem; }
+.role-badge {
+  display: inline-block;
+  padding: 0.5rem 1.2rem;
+  border-radius: var(--radius);
+  font-family: var(--display-font);
+  font-size: 1.1rem;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.8rem;
+  transform: rotate(-1.5deg);
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.35);
+}
 .role-badge.liberal { background: var(--liberal); }
 .role-badge.fascist { background: var(--fascist); }
 .role-badge.hitler { background: var(--hitler); }
 
 .choice-grid { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 0.8rem; }
 .vote-buttons { display: flex; gap: 1rem; margin: 1rem 0; }
-.vote-buttons button { flex: 1; padding: 0.8rem; font-size: 1.05rem; }
+.vote-buttons button { flex: 1; padding: 0.9rem; font-size: 1.1rem; }
 
 .policy-row { display: flex; gap: 1rem; margin: 1rem 0; flex-wrap: wrap; }
 .policy-choice { display: flex; flex-direction: column; gap: 0.5rem; align-items: center; }
-.policy-card { width: 110px; padding: 1.2rem 0.6rem; text-align: center; border-radius: var(--radius); font-weight: bold; border: 2px solid var(--border); }
+.policy-card {
+  width: 110px;
+  padding: 1.2rem 0.6rem;
+  text-align: center;
+  border-radius: var(--radius);
+  font-family: var(--display-font);
+  letter-spacing: 0.03em;
+  border: 3px solid var(--border);
+}
 .policy-card.liberal { background: rgba(61, 123, 217, 0.18); border-color: var(--liberal); color: #a9c8ff; }
 .policy-card.fascist { background: rgba(176, 52, 45, 0.18); border-color: var(--fascist); color: #ffb0a9; }
 
@@ -141,12 +226,12 @@ input {
 .capture-panel {
   margin: 1rem 0;
   padding: 0.9rem 1rem;
-  border: 1px dashed var(--accent);
+  border: 2px dashed var(--accent);
   border-radius: var(--radius);
-  background: rgba(201, 162, 39, 0.06);
+  background: rgba(232, 103, 74, 0.08);
 }
 .capture-panel.bystander { border-style: solid; border-color: var(--border); background: transparent; }
-.capture-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent); }
+.capture-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); font-weight: 700; }
 .capture-panel.bystander .capture-label { color: var(--text-dim); }
 .capture-actions { display: flex; gap: 0.6rem; margin-top: 0.6rem; }
 .capture-preview {
@@ -167,29 +252,29 @@ input {
   align-items: center;
   justify-content: center;
   padding: 2rem;
-  background: radial-gradient(ellipse at top, rgba(201, 162, 39, 0.08), transparent 60%);
+  background: radial-gradient(ellipse at top, rgba(232, 103, 74, 0.12), transparent 60%);
 }
 .special-session-card {
   max-width: 640px;
   width: 100%;
   text-align: center;
   padding: 2.5rem 2rem;
-  border: 1px solid var(--accent);
+  border: 3px solid var(--accent);
   border-radius: var(--radius);
   background: var(--panel);
 }
 .special-session-mark { display: block; font-size: 2rem; color: var(--accent); margin-bottom: 0.5rem; }
-.special-session-card h1 { margin: 0 0 0.3rem; font-size: 1.6rem; }
+.special-session-card h1 { margin: 0 0 0.3rem; font-size: 2rem; color: var(--cream); }
 .readouts { display: flex; flex-direction: column; gap: 1.2rem; margin: 2rem 0; text-align: left; }
-.readout { padding: 1rem 1.2rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel-2); }
-.readout-role { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent); }
-.readout p { margin: 0.4rem 0 0; font-style: italic; line-height: 1.5; }
+.readout { padding: 1rem 1.2rem; border: 2px solid var(--border); border-radius: var(--radius); background: var(--panel-2); }
+.readout-role { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); font-weight: 700; }
+.readout p { margin: 0.4rem 0 0; font-style: italic; line-height: 1.5; text-transform: none; }
 
 .special-session-call-button { margin: 0.4rem 0; }
 .special-session-call-banner {
   margin: 1rem 0;
   padding: 0.9rem 1rem;
-  border: 1px dashed var(--accent);
+  border: 2px dashed var(--accent);
   border-radius: var(--radius);
-  background: rgba(201, 162, 39, 0.06);
+  background: rgba(232, 103, 74, 0.08);
 }

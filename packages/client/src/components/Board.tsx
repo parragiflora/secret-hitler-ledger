@@ -37,7 +37,7 @@ export function BoardHeader({ view }: { view: PlayerView }) {
   return (
     <header className="board-header">
       <div className="brand">
-        <span className="brand-mark">☙</span> The Registrar's Ledger
+        <span className="brand-mark">👁</span> Secret Hitler
         <span className="room-code">Room {view.code}</span>
       </div>
       <div className="tracks">

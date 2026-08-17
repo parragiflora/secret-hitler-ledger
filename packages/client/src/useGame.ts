@@ -1,8 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ClientMessage, GameAction, PlayerView, ServerMessage } from "@interhuman/shared";
 
-const SERVER_HTTP = (import.meta.env.VITE_SERVER_URL as string | undefined) ?? "http://localhost:8787";
-const SERVER_WS = SERVER_HTTP.replace(/^http/, "ws") + "/ws";
+// Defaults to same-origin (relative URLs) so this works unmodified whether
+// the page was opened as localhost, a LAN IP, or a tunnel hostname -- the
+// dev server proxies /api and /ws through to the game server either way
+// (see vite.config.ts). Set VITE_SERVER_URL only if the server is deployed
+// somewhere separate from the client.
+const SERVER_HTTP = (import.meta.env.VITE_SERVER_URL as string | undefined) ?? "";
+const SERVER_WS = SERVER_HTTP
+  ? SERVER_HTTP.replace(/^http/, "ws") + "/ws"
+  : `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/ws`;
 
 interface StoredSession {
   code: string;
