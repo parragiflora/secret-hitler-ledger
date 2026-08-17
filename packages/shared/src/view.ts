@@ -14,6 +14,7 @@ import type {
 } from "./types.js";
 import { teamOf } from "./roles.js";
 import { activeCaptureTrigger, captureAlreadyLogged, type CaptureTrigger } from "./capture.js";
+import type { AmbientTensionLevel } from "./trustTrajectory.js";
 
 export interface PublicPlayer {
   id: string;
@@ -81,6 +82,14 @@ export interface PlayerView {
   activeCapture: CaptureTrigger | null;
   activeCaptureLogged: boolean;
 
+  // Section 9 step 4 / section 7 passive tracking: the ONE surface trust
+  // data gets during normal play -- a non-specific, table-wide mood
+  // reading. Never names a player or a signal; computed externally (from
+  // signalScores, which live outside GameState -- see
+  // packages/server/src/trustTrajectory.ts) and injected here rather than
+  // derived from state alone.
+  ambientTension: AmbientTensionLevel;
+
   log: string[];
 }
 
@@ -107,7 +116,7 @@ function computeKnownRoles(state: GameState, viewerId: string): Record<string, R
   return known;
 }
 
-export function viewForPlayer(state: GameState, viewerId: string): PlayerView {
+export function viewForPlayer(state: GameState, viewerId: string, ambientTension: AmbientTensionLevel = "calm"): PlayerView {
   const viewer = state.players.find((p) => p.id === viewerId) ?? null;
   const isPresident = viewer?.id === state.presidentId;
   const isChancellor = viewer?.id === state.chancellorId;
@@ -183,6 +192,8 @@ export function viewForPlayer(state: GameState, viewerId: string): PlayerView {
 
     activeCapture,
     activeCaptureLogged: activeCapture ? captureAlreadyLogged(state, activeCapture) : false,
+
+    ambientTension,
 
     log: state.log,
   };

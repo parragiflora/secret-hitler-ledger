@@ -17,6 +17,8 @@
 //   falls back to mock scores rather than throwing -- a capture moment
 //   should never break over an API surprise.
 
+import { SIGNAL_KEYS, type SignalKey } from "@interhuman/shared";
+
 export interface SignalScores {
   confidence: number; // 0-1
   stress: number;
@@ -25,9 +27,6 @@ export interface SignalScores {
   rawResponseJson: unknown;
   mocked: boolean;
 }
-
-const SIGNAL_KEYS = ["confidence", "stress", "skepticism", "hesitation"] as const;
-type SignalKey = (typeof SIGNAL_KEYS)[number];
 
 const API_URL = "https://api.interhuman.ai/v1/upload/analyze";
 const PROB_MAP: Record<string, number> = { high: 0.85, medium: 0.6, low: 0.35 };

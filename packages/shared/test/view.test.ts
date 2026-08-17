@@ -95,4 +95,12 @@ describe("per-player view redaction (section 1 role visibility)", () => {
     expect(view.finalRoles).not.toBeNull();
     expect(view.finalRoles![ids[4]]).toBe("hitler");
   });
+
+  it("ambientTension defaults to calm and reflects whatever the caller injects", () => {
+    const { state, ids } = makeStateWithRoles(FIVE_P);
+    expect(viewForPlayer(state, ids[0]).ambientTension).toBe("calm");
+    expect(viewForPlayer(state, ids[0], "charged").ambientTension).toBe("charged");
+    // Every viewer sees the same table-wide reading -- it's explicitly non-specific (section 7).
+    expect(viewForPlayer(state, ids[1], "restless").ambientTension).toBe("restless");
+  });
 });

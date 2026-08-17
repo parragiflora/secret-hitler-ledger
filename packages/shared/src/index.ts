@@ -1,5 +1,7 @@
 export * from "./types.js";
+export * from "./signals.js";
 export * from "./capture.js";
+export * from "./trustTrajectory.js";
 export * from "./roles.js";
 export * from "./deck.js";
 export * from "./powers.js";

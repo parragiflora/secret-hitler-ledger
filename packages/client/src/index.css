@@ -87,6 +87,11 @@ input {
 .meta { margin-top: 0.6rem; font-size: 0.8rem; color: var(--text-dim); display: flex; gap: 0.8rem; align-items: center; }
 .badge { background: var(--accent); color: #1a1a1a; padding: 0.1rem 0.5rem; border-radius: 999px; font-size: 0.7rem; }
 
+.tension-indicator { display: inline-flex; align-items: center; gap: 0.4rem; margin-left: auto; font-style: italic; }
+.tension-dot { width: 8px; height: 8px; border-radius: 50%; background: #3c8451; }
+.tension-indicator.tension-restless .tension-dot { background: var(--accent); }
+.tension-indicator.tension-charged .tension-dot { background: var(--fascist); box-shadow: 0 0 6px var(--fascist); }
+
 .layout { display: grid; grid-template-columns: 220px 1fr 260px; gap: 1rem; padding: 1.2rem; flex: 1; }
 @media (max-width: 900px) {
   .layout { grid-template-columns: 1fr; }

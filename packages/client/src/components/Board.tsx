@@ -1,4 +1,24 @@
-import type { PlayerView } from "@interhuman/shared";
+import type { AmbientTensionLevel, PlayerView } from "@interhuman/shared";
+
+// Section 7 passive tracking: the one surface trust data gets during normal
+// play. Deliberately vague -- no player names, no signal names, no scores.
+const TENSION_COPY: Record<AmbientTensionLevel, string> = {
+  calm: "The room feels calm.",
+  restless: "Something's stirring.",
+  charged: "The air is charged.",
+};
+
+function AmbientTensionIndicator({ level }: { level: AmbientTensionLevel }) {
+  return (
+    <span
+      className={`tension-indicator tension-${level}`}
+      title="The Registrar's ambient read on the table."
+    >
+      <span className="tension-dot" />
+      {TENSION_COPY[level]}
+    </span>
+  );
+}
 
 function PolicyTrack({ label, count, total }: { label: string; count: number; total: number }) {
   return (
@@ -35,6 +55,7 @@ export function BoardHeader({ view }: { view: PlayerView }) {
       <div className="meta">
         Round {view.roundNumber} · Draw pile {view.drawPileCount} · Discard {view.discardPileCount}
         {view.vetoUnlocked && <span className="badge">Veto unlocked</span>}
+        {view.phase !== "LOBBY" && view.phase !== "ROLE_REVEAL" && <AmbientTensionIndicator level={view.ambientTension} />}
       </div>
     </header>
   );

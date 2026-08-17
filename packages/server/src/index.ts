@@ -16,6 +16,7 @@ import {
 import { createRoom, getRoom, type Room } from "./rooms.js";
 import { actorIdOf } from "./actionAuth.js";
 import { analyzeClip } from "./interhuman.js";
+import { computeRoomAmbientTension } from "./trustTrajectory.js";
 
 // Load packages/server/.env (gitignored) regardless of invocation cwd, so
 // INTERHUMAN_API_KEY works whether run via `npm run dev` from this package
@@ -81,9 +82,18 @@ function send(ws: WebSocket, message: ServerMessage): void {
   if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(message));
 }
 
+function ambientTensionFor(room: Room): ReturnType<typeof computeRoomAmbientTension> {
+  return computeRoomAmbientTension(
+    room.state.speechEvents,
+    room.signalScores,
+    room.state.players.map((p) => p.id),
+  );
+}
+
 function broadcast(room: Room): void {
+  const ambientTension = ambientTensionFor(room); // one table-wide reading, computed once per broadcast
   for (const [playerId, socket] of room.sockets) {
-    send(socket, { type: "STATE", view: viewForPlayer(room.state, playerId) });
+    send(socket, { type: "STATE", view: viewForPlayer(room.state, playerId, ambientTension) });
   }
 }
 
@@ -114,7 +124,12 @@ wss.on("connection", (ws) => {
           playerId = msg.playerId;
           room.sockets.set(playerId, ws);
           room.state = reduce(room.state, { type: "SET_CONNECTED", playerId, isConnected: true });
-          send(ws, { type: "WELCOME", playerId, token: msg.token, view: viewForPlayer(room.state, playerId) });
+          send(ws, {
+            type: "WELCOME",
+            playerId,
+            token: msg.token,
+            view: viewForPlayer(room.state, playerId, ambientTensionFor(room)),
+          });
           broadcast(room);
           return;
         }
@@ -126,7 +141,7 @@ wss.on("connection", (ws) => {
         room.state = reduce(room.state, { type: "JOIN_GAME", playerId, name: msg.name.trim() });
         room.tokens.set(playerId, token);
         room.sockets.set(playerId, ws);
-        send(ws, { type: "WELCOME", playerId, token, view: viewForPlayer(room.state, playerId) });
+        send(ws, { type: "WELCOME", playerId, token, view: viewForPlayer(room.state, playerId, ambientTensionFor(room)) });
         broadcast(room);
         return;
       }
