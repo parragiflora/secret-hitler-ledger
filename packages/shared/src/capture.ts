@@ -53,7 +53,16 @@ export function activeCaptureTrigger(state: GameState): CaptureTrigger | null {
       if (state.pendingExecutivePower === "investigate_loyalty" && state.pendingExecutiveResult && state.presidentId) {
         return trigger("investigation_announcement", state.presidentId);
       }
-      if (state.pendingExecutivePower === "execution" && state.pendingExecutionTargetId) {
+      // Note: execution never lingers in EXECUTIVE_ACTION waiting for last
+      // words -- it transitions straight to SPECIAL_SESSION (section 7
+      // trigger 2 fires unconditionally), so that case is handled below.
+      return null;
+
+    case "SPECIAL_SESSION":
+      // The last_words window stays open through the Special Session that
+      // always accompanies an execution (section 6/7) -- the target is still
+      // alive until CONTINUE_SPECIAL_SESSION's finalize_execution runs.
+      if (state.pendingSpecialSession?.resumeAction.kind === "finalize_execution" && state.pendingExecutionTargetId) {
         return trigger("last_words", state.pendingExecutionTargetId);
       }
       return null;

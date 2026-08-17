@@ -48,12 +48,31 @@ describe("activeCaptureTrigger (section 6)", () => {
     });
   });
 
-  it("EXECUTIVE_ACTION execution: optional last_words for the target, only once chosen", () => {
-    const { state, ids } = makeStateWithRoles(FIVE_P);
+  it("EXECUTIVE_ACTION execution: no capture until the target is chosen", () => {
+    const { state } = makeStateWithRoles(FIVE_P);
     const beforeTarget: GameState = { ...state, phase: "EXECUTIVE_ACTION", pendingExecutivePower: "execution" };
     expect(activeCaptureTrigger(beforeTarget)).toBeNull();
+  });
 
-    const afterTarget: GameState = { ...beforeTarget, pendingExecutionTargetId: ids[4] };
+  it("SPECIAL_SESSION (execution trigger): last_words stays open for the target through the pause", () => {
+    // Section 7: choosing an execution target transitions straight to
+    // SPECIAL_SESSION (trigger 2 fires unconditionally), and last_words
+    // capture (section 6) stays available through that pause since the
+    // target isn't eliminated until CONTINUE_SPECIAL_SESSION resolves it.
+    const { state, ids } = makeStateWithRoles(FIVE_P);
+    const afterTarget: GameState = {
+      ...state,
+      phase: "SPECIAL_SESSION",
+      pendingExecutivePower: "execution",
+      pendingExecutionTargetId: ids[4],
+      pendingSpecialSession: {
+        triggerReason: "execution",
+        roundNumber: state.roundNumber,
+        presidentId: ids[0],
+        chancellorId: ids[1],
+        resumeAction: { kind: "finalize_execution" },
+      },
+    };
     expect(activeCaptureTrigger(afterTarget)).toEqual({
       eventType: "last_words",
       speakerId: ids[4],

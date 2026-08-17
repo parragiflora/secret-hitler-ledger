@@ -30,6 +30,7 @@ export type GamePhase =
   | "VETO_RESPONSE" // President accepting/rejecting a proposed veto
   | "POLICY_DEFENSE"
   | "EXECUTIVE_ACTION"
+  | "SPECIAL_SESSION" // section 7: paused, full-screen Registrar's findings
   | "GAME_END";
 
 export type ExecutivePowerType =
@@ -80,6 +81,35 @@ export interface SpeechEvent {
   // wires the start/stop capture hooks and this event log only, no clip
   // upload or signal scoring yet.
   clipRef: string | null;
+}
+
+// Section 7: the three Special Session triggers.
+export type SpecialSessionTriggerReason = "policy_threshold" | "execution" | "player_called";
+
+// What to do once the paused Special Session is dismissed. Each trigger
+// interrupts a different point in the normal flow, so each needs a
+// different "what were we about to do" continuation:
+//  - policy_threshold interrupts right before the next round would begin
+//    (possibly with a special-election president override already decided).
+//  - execution interrupts before the elimination itself takes effect.
+//  - player_called interrupts mid-phase and simply resumes that same phase
+//    -- nothing about the round was actually advancing when it fired.
+export type SpecialSessionResumeAction =
+  | { kind: "advance_round"; presidentOverride: string | null }
+  | { kind: "finalize_execution" }
+  | { kind: "return_to_phase"; phase: GamePhase };
+
+export interface PendingSpecialSession {
+  triggerReason: SpecialSessionTriggerReason;
+  roundNumber: number;
+  presidentId: string;
+  chancellorId: string;
+  resumeAction: SpecialSessionResumeAction;
+}
+
+export interface PendingSpecialSessionVote {
+  proposedBy: string;
+  votes: VoteRecord[];
 }
 
 export type WinningTeam = Team | null;
@@ -147,6 +177,21 @@ export interface GameState {
 
   speechEvents: SpeechEvent[]; // section 6 capture log
 
+  // Section 7: metadata for the currently-paused Special Session (readout
+  // TEXT is generated server-side from signalScores, outside GameState --
+  // see packages/server/src/specialSession.ts -- and injected into the view).
+  pendingSpecialSession: PendingSpecialSession | null;
+  // Trigger 1 fires exactly once per game, the moment fascistPoliciesEnacted
+  // hits 3 -- see engine.ts's shouldFirePolicyThresholdTrigger.
+  policyThresholdSessionFired: boolean;
+  // Trigger 3's propose+vote sub-flow. Deliberately doesn't touch `phase` --
+  // whatever phase was interrupted stays put underneath the vote overlay,
+  // so a failed call resumes exactly where play was.
+  pendingSpecialSessionVote: PendingSpecialSessionVote | null;
+  // Trigger 3 is a shared, game-wide, one-time resource -- only a PASSED
+  // call spends it (section 10: a failed call can be retried later).
+  specialSessionResourceSpent: boolean;
+
   log: string[]; // human-readable public event log (drives the "simple buttons/text" UI)
 }
 
@@ -174,7 +219,10 @@ export type GameAction =
       eventType: SpeechEventType;
       durationMs: number | null;
       skipped: boolean;
-    };
+    }
+  | { type: "PROPOSE_SPECIAL_SESSION"; playerId: string }
+  | { type: "CAST_SPECIAL_SESSION_VOTE"; playerId: string; choice: VoteChoice }
+  | { type: "CONTINUE_SPECIAL_SESSION"; presidentId: string };
 
 export class GameRuleError extends Error {
   constructor(message: string) {

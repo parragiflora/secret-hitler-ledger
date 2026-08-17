@@ -12,6 +12,8 @@ export function actorIdOf(action: GameAction): string | null {
     case "ACKNOWLEDGE_ROLE":
     case "CAST_VOTE":
     case "RECORD_SPEECH_EVENT":
+    case "PROPOSE_SPECIAL_SESSION":
+    case "CAST_SPECIAL_SESSION_VOTE":
       return action.playerId;
     case "NOMINATE_CHANCELLOR":
     case "PRESIDENT_DISCARD":
@@ -21,6 +23,7 @@ export function actorIdOf(action: GameAction): string | null {
     case "EXECUTIVE_POLICY_PEEK":
     case "EXECUTIVE_EXECUTION":
     case "ACKNOWLEDGE_EXECUTIVE_ACTION":
+    case "CONTINUE_SPECIAL_SESSION":
       return action.presidentId;
     case "CHANCELLOR_ENACT":
     case "CHANCELLOR_PROPOSE_VETO":

@@ -120,9 +120,16 @@ describe("win conditions (section 2 CHECK_WIN_CONDITIONS)", () => {
   it("Liberals win when Hitler is executed", () => {
     const { state, ids } = makeStateWithRoles(FIVE_P);
     const hitlerId = state.players.find((p) => p.role === "hitler")!.id;
-    const s0: GameState = { ...state, phase: "EXECUTIVE_ACTION", pendingExecutivePower: "execution" };
+    // A real execution power can only fire off a normal (non-chaos)
+    // enactment, so a Chancellor is always seated -- reflect that here too.
+    const s0: GameState = { ...state, phase: "EXECUTIVE_ACTION", chancellorId: ids[1], pendingExecutivePower: "execution" };
     let s = reduce(s0, { type: "EXECUTIVE_EXECUTION", presidentId: ids[0], targetId: hitlerId }, rng);
-    s = reduce(s, { type: "ACKNOWLEDGE_EXECUTIVE_ACTION", presidentId: ids[0] }, rng);
+    // Section 7 trigger 2: choosing the target pauses the game for a Special
+    // Session before the elimination itself -- Hitler is still alive here.
+    expect(s.phase).toBe("SPECIAL_SESSION");
+    expect(s.players.find((p) => p.id === hitlerId)!.isAlive).toBe(true);
+
+    s = reduce(s, { type: "CONTINUE_SPECIAL_SESSION", presidentId: ids[0] }, rng);
     expect(s.players.find((p) => p.id === hitlerId)!.isAlive).toBe(false);
     expect(s.winner).toBe("liberal");
     expect(s.winReason).toBe("hitler_executed");

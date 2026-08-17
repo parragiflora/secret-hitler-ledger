@@ -1,6 +1,6 @@
 // Section 2-5: the core rules-engine state machine. Pure reducer: (state, action, rng) -> state.
 // No I/O, no AI, no video -- per section 9 build order, this is Phase 1 in isolation.
-import type { GameAction, GameState, Player, SpeechEvent, WinReason } from "./types.js";
+import type { GameAction, GameState, Player, SpeechEvent, VoteRecord, WinReason } from "./types.js";
 import { GameRuleError } from "./types.js";
 import { assignRoles, teamOf } from "./roles.js";
 import { freshDeck, drawPolicies } from "./deck.js";
@@ -14,6 +14,7 @@ import {
   seatOrderOf,
 } from "./succession.js";
 import { checkPolicyAndExecutionWin, isHitlerChancellorWin } from "./winConditions.js";
+import { canProposeSpecialSession, shouldFirePolicyThresholdTrigger } from "./specialSession.js";
 
 export function createGame(id: string, code: string): GameState {
   return {
@@ -56,6 +57,10 @@ export function createGame(id: string, code: string): GameState {
     winner: null,
     winReason: null,
     speechEvents: [],
+    pendingSpecialSession: null,
+    policyThresholdSessionFired: false,
+    pendingSpecialSessionVote: null,
+    specialSessionResourceSpent: false,
     log: [],
   };
 }
@@ -108,6 +113,34 @@ function beginNextRound(state: GameState, presidentOverride?: string): GameState
   };
 }
 
+/**
+ * Every path that would otherwise call beginNextRound() routes through here
+ * first (section 7 trigger 1). If the 3rd Fascist policy just landed and a
+ * government is seated to report on, the round doesn't actually advance yet
+ * -- the game pauses in SPECIAL_SESSION, and beginNextRound is deferred into
+ * resumeAction until CONTINUE_SPECIAL_SESSION runs.
+ */
+function proceedToNextRoundOrSpecialSession(state: GameState, presidentOverride: string | null): GameState {
+  if (shouldFirePolicyThresholdTrigger(state)) {
+    return withLog(
+      {
+        ...state,
+        phase: "SPECIAL_SESSION",
+        policyThresholdSessionFired: true,
+        pendingSpecialSession: {
+          triggerReason: "policy_threshold",
+          roundNumber: state.roundNumber,
+          presidentId: state.presidentId!,
+          chancellorId: state.chancellorId!,
+          resumeAction: { kind: "advance_round", presidentOverride },
+        },
+      },
+      "The Registrar calls a Special Session.",
+    );
+  }
+  return beginNextRound(state, presidentOverride ?? undefined);
+}
+
 /** Section 2 CHAOS_POLICY: election tracker hit 3. Auto-enacts top policy, resets tracker + term limits. */
 function runChaosPolicy(state: GameState, rng: () => number): GameState {
   const { drawn, drawPile, discardPile } = drawPolicies(state.drawPile, state.discardPile, 1, rng);
@@ -138,11 +171,41 @@ function resolveGovernmentFailure(state: GameState, rng: () => number): GameStat
     next = runChaosPolicy(next, rng);
     const winCheck = checkPolicyAndExecutionWin(next.liberalPoliciesEnacted, next.fascistPoliciesEnacted, next.players);
     if (winCheck.winner) return setWin(next, winCheck.winner, winCheck.reason!, `Game over: ${winCheck.reason}.`);
+    // A chaos-enacted 3rd Fascist policy can still have a real government to
+    // report on -- e.g. a Chancellor who was elected, then vetoed, and that
+    // veto's failure is what triggered chaos. shouldFirePolicyThresholdTrigger
+    // checks chancellorId, not "was this chaos", so this still fires
+    // correctly either way (and correctly stays silent for a plain
+    // 3-failed-elections chaos, where chancellorId is null).
   }
-  return beginNextRound(next);
+  return proceedToNextRoundOrSpecialSession(next, null);
 }
 
+// Actions still allowed while a Special Session (or its trigger-3 call vote)
+// has the floor. Deliberately narrow: connection bookkeeping always works,
+// last_words capture stays open through an execution's Special Session
+// (section 6), and each pause has exactly one action that can end it.
+const ALLOWED_DURING_SPECIAL_SESSION = new Set<GameAction["type"]>([
+  "SET_CONNECTED",
+  "LEAVE_GAME",
+  "RECORD_SPEECH_EVENT",
+  "CONTINUE_SPECIAL_SESSION",
+]);
+const ALLOWED_DURING_SPECIAL_SESSION_VOTE = new Set<GameAction["type"]>([
+  "SET_CONNECTED",
+  "LEAVE_GAME",
+  "RECORD_SPEECH_EVENT",
+  "CAST_SPECIAL_SESSION_VOTE",
+]);
+
 export function reduce(state: GameState, action: GameAction, rng: () => number = Math.random): GameState {
+  if (state.phase === "SPECIAL_SESSION" && !ALLOWED_DURING_SPECIAL_SESSION.has(action.type)) {
+    throw new GameRuleError("The Registrar has the floor -- wait for the Special Session to end.");
+  }
+  if (state.pendingSpecialSessionVote && !ALLOWED_DURING_SPECIAL_SESSION_VOTE.has(action.type)) {
+    throw new GameRuleError("A Special Session vote is underway -- wait for it to resolve.");
+  }
+
   switch (action.type) {
     case "JOIN_GAME": {
       if (state.phase !== "LOBBY") throw new GameRuleError("Cannot join a game that has already started.");
@@ -381,7 +444,11 @@ export function reduce(state: GameState, action: GameAction, rng: () => number =
           );
         }
       }
-      return beginNextRound(state);
+      // In practice every player-count bracket has a power at fascist slot 3
+      // (see section 5's table), so the 3rd-Fascist-policy trigger always
+      // routes through EXECUTIVE_ACTION above, never this path -- but route
+      // through the same gate anyway for defensive consistency.
+      return proceedToNextRoundOrSpecialSession(state, null);
     }
 
     case "EXECUTIVE_INVESTIGATE": {
@@ -449,7 +516,7 @@ export function reduce(state: GameState, action: GameAction, rng: () => number =
       const target = requirePlayer(state, action.targetId);
       if (target.id === action.presidentId) throw new GameRuleError("The President cannot execute themselves.");
       if (!target.isAlive) throw new GameRuleError("That player is already out of the game.");
-      return withLog(
+      let next: GameState = withLog(
         {
           ...state,
           pendingExecutionTargetId: target.id,
@@ -458,9 +525,26 @@ export function reduce(state: GameState, action: GameAction, rng: () => number =
             { round: state.roundNumber, powerType: "execution", actorId: action.presidentId, targetId: target.id, privateResult: null },
           ],
         },
-        // Deliberately says "is about to be executed" (not "was executed") -- this is the
-        // hook point for the future last_words capture / Special Session trigger #2 (section 6, 7).
+        // Deliberately says "is about to be executed" (not "was executed") --
+        // the target is still alive here, for last_words capture (section 6).
         `The President chooses ${target.name} to be executed.`,
+      );
+      // Section 7 trigger 2: fires automatically, every time, before the
+      // elimination itself -- see CONTINUE_SPECIAL_SESSION's
+      // finalize_execution handling for where the elimination actually happens.
+      return withLog(
+        {
+          ...next,
+          phase: "SPECIAL_SESSION",
+          pendingSpecialSession: {
+            triggerReason: "execution",
+            roundNumber: next.roundNumber,
+            presidentId: next.presidentId!,
+            chancellorId: next.chancellorId!,
+            resumeAction: { kind: "finalize_execution" },
+          },
+        },
+        "The Registrar calls a Special Session.",
       );
     }
 
@@ -470,25 +554,18 @@ export function reduce(state: GameState, action: GameAction, rng: () => number =
       if (!state.pendingExecutivePower) throw new GameRuleError("No executive power to resolve.");
 
       const power = state.pendingExecutivePower;
-      let next: GameState = state;
-
+      // Execution never reaches this action -- EXECUTIVE_EXECUTION transitions
+      // straight to SPECIAL_SESSION, and CONTINUE_SPECIAL_SESSION's
+      // finalize_execution resumeAction does what this used to do.
       if (power === "execution") {
-        if (!state.pendingExecutionTargetId) throw new GameRuleError("No execution target chosen yet.");
-        const targetId = state.pendingExecutionTargetId;
-        next = withLog(
-          {
-            ...next,
-            players: next.players.map((p) => (p.id === targetId ? { ...p, isAlive: false } : p)),
-          },
-          `${requirePlayer(state, targetId).name} is executed.`,
-        );
+        throw new GameRuleError("Execution resolves via its Special Session, not this action.");
       }
       if (power === "special_election" && !state.specialElectionNextPresidentId) {
         throw new GameRuleError("No special election target chosen yet.");
       }
 
-      next = {
-        ...next,
+      let next: GameState = {
+        ...state,
         pendingExecutivePower: null,
         pendingExecutionTargetId: null,
         pendingExecutiveResult: null,
@@ -499,9 +576,10 @@ export function reduce(state: GameState, action: GameAction, rng: () => number =
 
       if (power === "special_election") {
         const target = next.specialElectionNextPresidentId!;
-        return beginNextRound({ ...next, specialElectionNextPresidentId: null }, target);
+        next = { ...next, specialElectionNextPresidentId: null };
+        return proceedToNextRoundOrSpecialSession(next, target);
       }
-      return beginNextRound(next);
+      return proceedToNextRoundOrSpecialSession(next, null);
     }
 
     case "RECORD_SPEECH_EVENT": {
@@ -532,6 +610,96 @@ export function reduce(state: GameState, action: GameAction, rng: () => number =
         { ...state, speechEvents: [...state.speechEvents, event] },
         action.skipped ? `${speaker.name} skipped their ${label}.` : `${speaker.name} recorded a ${label} clip.`,
       );
+    }
+
+    case "PROPOSE_SPECIAL_SESSION": {
+      if (!canProposeSpecialSession(state)) {
+        throw new GameRuleError("Cannot call a Special Session right now.");
+      }
+      const proposer = requirePlayer(state, action.playerId);
+      return withLog(
+        { ...state, pendingSpecialSessionVote: { proposedBy: action.playerId, votes: [] } },
+        `${proposer.name} calls for a Special Session.`,
+      );
+    }
+
+    case "CAST_SPECIAL_SESSION_VOTE": {
+      if (!state.pendingSpecialSessionVote) throw new GameRuleError("No Special Session vote underway.");
+      const voter = requirePlayer(state, action.playerId);
+      if (!voter.isAlive) throw new GameRuleError("Dead players cannot vote.");
+      if (state.pendingSpecialSessionVote.votes.some((v) => v.playerId === action.playerId)) {
+        throw new GameRuleError("Player has already voted on this Special Session call.");
+      }
+      const votes: VoteRecord[] = [
+        ...state.pendingSpecialSessionVote.votes,
+        { round: state.roundNumber, playerId: action.playerId, choice: action.choice },
+      ];
+      const aliveCount = state.players.filter((p) => p.isAlive).length;
+      if (votes.length < aliveCount) {
+        return { ...state, pendingSpecialSessionVote: { ...state.pendingSpecialSessionVote, votes } };
+      }
+
+      const ja = votes.filter((v) => v.choice === "ja").length;
+      const nein = votes.length - ja;
+      const passed = ja > nein; // ties fail -- same threshold as an election vote (section 7)
+      const next: GameState = withLog(
+        { ...state, pendingSpecialSessionVote: null },
+        `Special Session call: ${ja} Ja - ${nein} Nein. ${passed ? "The table calls a Special Session." : "The call fails."}`,
+      );
+
+      if (!passed) return next; // a failed call does NOT spend the resource (section 10)
+
+      return {
+        ...next,
+        phase: "SPECIAL_SESSION",
+        specialSessionResourceSpent: true,
+        pendingSpecialSession: {
+          triggerReason: "player_called",
+          roundNumber: next.roundNumber,
+          presidentId: next.presidentId!,
+          chancellorId: next.chancellorId!,
+          // `phase` never left the interrupted phase during the vote (see the
+          // top-of-reduce guard), so it's exactly what to resume afterward.
+          resumeAction: { kind: "return_to_phase", phase: state.phase },
+        },
+      };
+    }
+
+    case "CONTINUE_SPECIAL_SESSION": {
+      if (state.phase !== "SPECIAL_SESSION" || !state.pendingSpecialSession) {
+        throw new GameRuleError("No Special Session to continue.");
+      }
+      if (action.presidentId !== state.pendingSpecialSession.presidentId) {
+        throw new GameRuleError("Only the President can continue from a Special Session.");
+      }
+      const { resumeAction } = state.pendingSpecialSession;
+      const cleared: GameState = { ...state, pendingSpecialSession: null };
+
+      if (resumeAction.kind === "finalize_execution") {
+        const targetId = cleared.pendingExecutionTargetId;
+        if (!targetId) throw new GameRuleError("No execution target to finalize.");
+        const next: GameState = withLog(
+          {
+            ...cleared,
+            players: cleared.players.map((p) => (p.id === targetId ? { ...p, isAlive: false } : p)),
+            pendingExecutivePower: null,
+            pendingExecutionTargetId: null,
+            pendingExecutiveResult: null,
+          },
+          `${requirePlayer(cleared, targetId).name} is executed.`,
+        );
+        const winCheck = checkPolicyAndExecutionWin(next.liberalPoliciesEnacted, next.fascistPoliciesEnacted, next.players);
+        if (winCheck.winner) return setWin(next, winCheck.winner, winCheck.reason!, `Game over: ${winCheck.reason}.`);
+        return beginNextRound(next);
+      }
+
+      if (resumeAction.kind === "advance_round") {
+        return beginNextRound(cleared, resumeAction.presidentOverride ?? undefined);
+      }
+
+      // return_to_phase: trigger 3 interrupted mid-phase -- nothing about the
+      // round was advancing, so just hand control back to that same phase.
+      return { ...cleared, phase: resumeAction.phase };
     }
 
     default:

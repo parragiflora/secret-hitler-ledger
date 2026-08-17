@@ -13,6 +13,7 @@ import {
   VetoResponsePanel,
   WaitingRoom,
 } from "./components/GamePhases";
+import { SpecialSessionCallControl, SpecialSessionOverlay } from "./components/SpecialSession";
 
 function PhasePanel({ view, send }: { view: NonNullable<ReturnType<typeof useGame>["view"]>; send: ReturnType<typeof useGame>["sendAction"] }) {
   switch (view.phase) {
@@ -61,6 +62,16 @@ export default function App() {
     );
   }
 
+  // Section 7: a Special Session takes over the whole screen while it's up --
+  // no roster/log/board underneath, just the Registrar's findings.
+  if (view.phase === "SPECIAL_SESSION") {
+    return (
+      <div className="app-shell in-game">
+        <SpecialSessionOverlay view={view} send={sendAction} />
+      </div>
+    );
+  }
+
   return (
     <div className="app-shell in-game">
       <BoardHeader view={view} />
@@ -68,6 +79,7 @@ export default function App() {
         <PlayerRoster view={view} />
         <main className="main-panel">
           <YourRolePanel view={view} />
+          <SpecialSessionCallControl view={view} send={sendAction} />
           <PhasePanel view={view} send={sendAction} />
           {error && <p className="error">{error}</p>}
         </main>

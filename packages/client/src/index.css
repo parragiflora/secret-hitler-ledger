@@ -159,3 +159,37 @@ input {
   transform: scaleX(-1); /* mirror the self-preview like a front camera */
 }
 .capture-preview[controls] { transform: none; } /* played-back clip shouldn't be mirrored */
+
+/* Section 7: Special Sessions */
+.special-session-overlay {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  background: radial-gradient(ellipse at top, rgba(201, 162, 39, 0.08), transparent 60%);
+}
+.special-session-card {
+  max-width: 640px;
+  width: 100%;
+  text-align: center;
+  padding: 2.5rem 2rem;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+.special-session-mark { display: block; font-size: 2rem; color: var(--accent); margin-bottom: 0.5rem; }
+.special-session-card h1 { margin: 0 0 0.3rem; font-size: 1.6rem; }
+.readouts { display: flex; flex-direction: column; gap: 1.2rem; margin: 2rem 0; text-align: left; }
+.readout { padding: 1rem 1.2rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel-2); }
+.readout-role { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent); }
+.readout p { margin: 0.4rem 0 0; font-style: italic; line-height: 1.5; }
+
+.special-session-call-button { margin: 0.4rem 0; }
+.special-session-call-banner {
+  margin: 1rem 0;
+  padding: 0.9rem 1rem;
+  border: 1px dashed var(--accent);
+  border-radius: var(--radius);
+  background: rgba(201, 162, 39, 0.06);
+}

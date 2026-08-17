@@ -8,13 +8,16 @@ import type {
   GameState,
   PolicyType,
   Role,
+  SpecialSessionTriggerReason,
   Team,
+  VoteChoice,
   WinReason,
   WinningTeam,
 } from "./types.js";
 import { teamOf } from "./roles.js";
 import { activeCaptureTrigger, captureAlreadyLogged, type CaptureTrigger } from "./capture.js";
 import type { AmbientTensionLevel } from "./trustTrajectory.js";
+import { canProposeSpecialSession } from "./specialSession.js";
 
 export interface PublicPlayer {
   id: string;
@@ -22,6 +25,21 @@ export interface PublicPlayer {
   seatOrder: number;
   isAlive: boolean;
   isConnected: boolean;
+}
+
+export interface ActiveSpecialSessionView {
+  triggerReason: SpecialSessionTriggerReason;
+  roundNumber: number;
+  presidentId: string;
+  chancellorId: string;
+  presidentReadout: string;
+  chancellorReadout: string;
+}
+
+export interface PendingSpecialSessionVoteView {
+  proposedBy: string;
+  votesCast: string[]; // choices withheld until everyone's voted, like an election
+  myVote: VoteChoice | null;
 }
 
 export interface PlayerView {
@@ -57,7 +75,7 @@ export interface PlayerView {
   pendingVetoProposal: boolean;
 
   playersWhoHaveVoted: string[]; // choices withheld until all votes are in
-  myVote: "ja" | "nein" | null;
+  myVote: VoteChoice | null;
   lastVoteResult: { ja: number; nein: number; passed: boolean } | null;
 
   myPresidentHand: PolicyType[] | null;
@@ -90,7 +108,21 @@ export interface PlayerView {
   // derived from state alone.
   ambientTension: AmbientTensionLevel;
 
+  // Section 7: who's under discussion and their two readout sentences are
+  // public -- broadcast to the whole table as a full-screen reveal, not
+  // redacted per viewer. The readout TEXT itself is generated server-side
+  // (needs signalScores, outside GameState) and injected via ViewExtras.
+  activeSpecialSession: ActiveSpecialSessionView | null;
+  pendingSpecialSessionVote: PendingSpecialSessionVoteView | null;
+  specialSessionAvailable: boolean; // whether trigger 3 could be proposed right now
+
   log: string[];
+}
+
+/** Server-computed data that doesn't live in GameState -- see the fields' own doc comments above. */
+export interface ViewExtras {
+  ambientTension?: AmbientTensionLevel;
+  specialSessionReadouts?: { presidentReadout: string; chancellorReadout: string } | null;
 }
 
 function computeKnownRoles(state: GameState, viewerId: string): Record<string, Role> {
@@ -116,10 +148,11 @@ function computeKnownRoles(state: GameState, viewerId: string): Record<string, R
   return known;
 }
 
-export function viewForPlayer(state: GameState, viewerId: string, ambientTension: AmbientTensionLevel = "calm"): PlayerView {
+export function viewForPlayer(state: GameState, viewerId: string, extras: ViewExtras = {}): PlayerView {
   const viewer = state.players.find((p) => p.id === viewerId) ?? null;
   const isPresident = viewer?.id === state.presidentId;
   const isChancellor = viewer?.id === state.chancellorId;
+  const ambientTension = extras.ambientTension ?? "calm";
 
   const votesIn = state.currentVotes;
   const aliveCount = state.players.filter((p) => p.isAlive).length;
@@ -132,6 +165,32 @@ export function viewForPlayer(state: GameState, viewerId: string, ambientTension
       : null;
 
   const activeCapture = activeCaptureTrigger(state);
+
+  const activeSpecialSession: ActiveSpecialSessionView | null =
+    state.phase === "SPECIAL_SESSION" && state.pendingSpecialSession
+      ? {
+          triggerReason: state.pendingSpecialSession.triggerReason,
+          roundNumber: state.pendingSpecialSession.roundNumber,
+          presidentId: state.pendingSpecialSession.presidentId,
+          chancellorId: state.pendingSpecialSession.chancellorId,
+          // Generation is synchronous server-side the moment the phase
+          // changes, so this gap is only ever hit by tests calling
+          // viewForPlayer directly without extras.
+          presidentReadout: extras.specialSessionReadouts?.presidentReadout ?? "The Registrar is composing findings...",
+          chancellorReadout: extras.specialSessionReadouts?.chancellorReadout ?? "The Registrar is composing findings...",
+        }
+      : null;
+
+  const svote = state.pendingSpecialSessionVote;
+  const svoteAliveCount = state.players.filter((p) => p.isAlive).length;
+  const svoteAllIn = svote ? svote.votes.length === svoteAliveCount && svoteAliveCount > 0 : false;
+  const pendingSpecialSessionVote: PendingSpecialSessionVoteView | null = svote
+    ? {
+        proposedBy: svote.proposedBy,
+        votesCast: svoteAllIn ? [] : svote.votes.map((v) => v.playerId),
+        myVote: svoteAllIn ? null : (svote.votes.find((v) => v.playerId === viewerId)?.choice ?? null),
+      }
+    : null;
 
   return {
     gameId: state.id,
@@ -194,6 +253,10 @@ export function viewForPlayer(state: GameState, viewerId: string, ambientTension
     activeCaptureLogged: activeCapture ? captureAlreadyLogged(state, activeCapture) : false,
 
     ambientTension,
+
+    activeSpecialSession,
+    pendingSpecialSessionVote,
+    specialSessionAvailable: canProposeSpecialSession(state),
 
     log: state.log,
   };

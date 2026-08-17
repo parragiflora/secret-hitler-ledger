@@ -99,8 +99,67 @@ describe("per-player view redaction (section 1 role visibility)", () => {
   it("ambientTension defaults to calm and reflects whatever the caller injects", () => {
     const { state, ids } = makeStateWithRoles(FIVE_P);
     expect(viewForPlayer(state, ids[0]).ambientTension).toBe("calm");
-    expect(viewForPlayer(state, ids[0], "charged").ambientTension).toBe("charged");
+    expect(viewForPlayer(state, ids[0], { ambientTension: "charged" }).ambientTension).toBe("charged");
     // Every viewer sees the same table-wide reading -- it's explicitly non-specific (section 7).
-    expect(viewForPlayer(state, ids[1], "restless").ambientTension).toBe("restless");
+    expect(viewForPlayer(state, ids[1], { ambientTension: "restless" }).ambientTension).toBe("restless");
+  });
+
+  it("exposes the active Special Session (metadata + injected readout text) identically to every viewer", () => {
+    const { state, ids } = makeStateWithRoles(FIVE_P);
+    const s: GameState = {
+      ...state,
+      phase: "SPECIAL_SESSION",
+      pendingSpecialSession: {
+        triggerReason: "execution",
+        roundNumber: 3,
+        presidentId: ids[0],
+        chancellorId: ids[1],
+        resumeAction: { kind: "finalize_execution" },
+      },
+    };
+    const extras = { specialSessionReadouts: { presidentReadout: "President text.", chancellorReadout: "Chancellor text." } };
+    const bystanderView = viewForPlayer(s, ids[2], extras);
+    const presidentView = viewForPlayer(s, ids[0], extras);
+    expect(bystanderView.activeSpecialSession).toEqual({
+      triggerReason: "execution",
+      roundNumber: 3,
+      presidentId: ids[0],
+      chancellorId: ids[1],
+      presidentReadout: "President text.",
+      chancellorReadout: "Chancellor text.",
+    });
+    // Not viewer-specific -- the full-screen reveal is the same for everyone.
+    expect(presidentView.activeSpecialSession).toEqual(bystanderView.activeSpecialSession);
+  });
+
+  it("is null outside SPECIAL_SESSION even if stale pendingSpecialSession data exists", () => {
+    const { state, ids } = makeStateWithRoles(FIVE_P);
+    expect(viewForPlayer(state, ids[0]).activeSpecialSession).toBeNull();
+  });
+
+  it("withholds Special Session call vote choices until everyone's voted, like an election", () => {
+    const { state, ids } = makeStateWithRoles(FIVE_P);
+    const s: GameState = {
+      ...state,
+      phase: "LEGISLATIVE_PRESIDENT",
+      pendingSpecialSessionVote: {
+        proposedBy: ids[2],
+        votes: [{ round: 1, playerId: ids[0], choice: "ja" }],
+      },
+    };
+    const otherView = viewForPlayer(s, ids[1]);
+    expect(otherView.pendingSpecialSessionVote?.votesCast).toContain(ids[0]);
+    expect(otherView.pendingSpecialSessionVote?.myVote).toBeNull();
+    const selfView = viewForPlayer(s, ids[0]);
+    expect(selfView.pendingSpecialSessionVote?.myVote).toBe("ja");
+  });
+
+  it("specialSessionAvailable reflects canProposeSpecialSession", () => {
+    const { state, ids } = makeStateWithRoles(FIVE_P);
+    expect(viewForPlayer(state, ids[0]).specialSessionAvailable).toBe(false); // NOMINATION -- not proposable
+    const readyToPropose: GameState = { ...state, phase: "LEGISLATIVE_PRESIDENT" };
+    expect(viewForPlayer(readyToPropose, ids[0]).specialSessionAvailable).toBe(true);
+    const spent: GameState = { ...readyToPropose, specialSessionResourceSpent: true };
+    expect(viewForPlayer(spent, ids[0]).specialSessionAvailable).toBe(false);
   });
 });

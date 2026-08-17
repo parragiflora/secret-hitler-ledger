@@ -17,6 +17,7 @@ import { createRoom, getRoom, type Room } from "./rooms.js";
 import { actorIdOf } from "./actionAuth.js";
 import { analyzeClip } from "./interhuman.js";
 import { computeRoomAmbientTension } from "./trustTrajectory.js";
+import { generateSpecialSessionReadouts } from "./specialSession.js";
 
 // Load packages/server/.env (gitignored) regardless of invocation cwd, so
 // INTERHUMAN_API_KEY works whether run via `npm run dev` from this package
@@ -90,10 +91,32 @@ function ambientTensionFor(room: Room): ReturnType<typeof computeRoomAmbientTens
   );
 }
 
+// Section 7: readout generation is pure/synchronous (unlike Interhuman
+// analysis), so it happens in one shot right when a Special Session opens --
+// call this after every reduce() so it's always in sync with room.state.
+// Caches the result (readout generation rotates variant history, so it must
+// only run ONCE per session, not once per viewer/reconnect) and clears it
+// once the session ends.
+function syncSpecialSessionReadouts(room: Room): void {
+  if (room.state.phase === "SPECIAL_SESSION" && room.state.pendingSpecialSession) {
+    if (!room.currentSpecialSessionReadouts) {
+      room.currentSpecialSessionReadouts = generateSpecialSessionReadouts(room, room.state.pendingSpecialSession);
+    }
+  } else {
+    room.currentSpecialSessionReadouts = null;
+  }
+}
+
+function viewFor(room: Room, playerId: string): ReturnType<typeof viewForPlayer> {
+  return viewForPlayer(room.state, playerId, {
+    ambientTension: ambientTensionFor(room),
+    specialSessionReadouts: room.currentSpecialSessionReadouts,
+  });
+}
+
 function broadcast(room: Room): void {
-  const ambientTension = ambientTensionFor(room); // one table-wide reading, computed once per broadcast
   for (const [playerId, socket] of room.sockets) {
-    send(socket, { type: "STATE", view: viewForPlayer(room.state, playerId, ambientTension) });
+    send(socket, { type: "STATE", view: viewFor(room, playerId) });
   }
 }
 
@@ -124,12 +147,8 @@ wss.on("connection", (ws) => {
           playerId = msg.playerId;
           room.sockets.set(playerId, ws);
           room.state = reduce(room.state, { type: "SET_CONNECTED", playerId, isConnected: true });
-          send(ws, {
-            type: "WELCOME",
-            playerId,
-            token: msg.token,
-            view: viewForPlayer(room.state, playerId, ambientTensionFor(room)),
-          });
+          syncSpecialSessionReadouts(room);
+          send(ws, { type: "WELCOME", playerId, token: msg.token, view: viewFor(room, playerId) });
           broadcast(room);
           return;
         }
@@ -139,9 +158,10 @@ wss.on("connection", (ws) => {
         playerId = randomUUID();
         const token = randomUUID();
         room.state = reduce(room.state, { type: "JOIN_GAME", playerId, name: msg.name.trim() });
+        syncSpecialSessionReadouts(room);
         room.tokens.set(playerId, token);
         room.sockets.set(playerId, ws);
-        send(ws, { type: "WELCOME", playerId, token, view: viewForPlayer(room.state, playerId, ambientTensionFor(room)) });
+        send(ws, { type: "WELCOME", playerId, token, view: viewFor(room, playerId) });
         broadcast(room);
         return;
       }
@@ -153,6 +173,7 @@ wss.on("connection", (ws) => {
           throw new GameRuleError("You cannot act on another player's behalf.");
         }
         room.state = reduce(room.state, msg.action);
+        syncSpecialSessionReadouts(room);
         broadcast(room);
         return;
       }
