@@ -16,7 +16,7 @@ import {
 import { createRoom, getRoom, type Room } from "./rooms.js";
 import { actorIdOf } from "./actionAuth.js";
 import { analyzeClip } from "./interhuman.js";
-import { computeRoomAmbientTension } from "./trustTrajectory.js";
+import { computeGameRecap, computeRoomAmbientTension } from "./trustTrajectory.js";
 import { generateSpecialSessionReadouts } from "./specialSession.js";
 
 // Load packages/server/.env (gitignored) regardless of invocation cwd, so
@@ -111,6 +111,10 @@ function viewFor(room: Room, playerId: string): ReturnType<typeof viewForPlayer>
   return viewForPlayer(room.state, playerId, {
     ambientTension: ambientTensionFor(room),
     specialSessionReadouts: room.currentSpecialSessionReadouts,
+    // Section 9 step 6: cheap pure computation over already-in-memory data
+    // (unlike the readouts above, nothing here rotates or needs caching), so
+    // just compute it fresh whenever the game has actually ended.
+    recap: room.state.phase === "GAME_END" ? computeGameRecap(room.state, room.signalScores) : null,
   });
 }
 

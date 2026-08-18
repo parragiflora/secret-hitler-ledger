@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { GameAction, PlayerView, PolicyType } from "@interhuman/shared";
 import { eligibleNomineeIds } from "../eligibility";
 import { CapturePanel } from "./CapturePanel";
+import { GameRecapSection } from "./Recap";
 
 type Send = (action: GameAction) => void;
 function nameOf(view: PlayerView, id: string | null): string {
@@ -395,6 +396,7 @@ export function GameEndPanel({ view }: { view: PlayerView }) {
           ))}
         </ul>
       )}
+      {view.recap && <GameRecapSection recap={view.recap} />}
     </div>
   );
 }

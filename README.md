@@ -7,7 +7,7 @@ Per `secret-hitler-ledger-spec.md` section 9's build order:
 3. **Interhuman proxy + `signal_scores` storage** -- done.
 4. **`trust_trajectory` rollup** -- done.
 5. **Section 7** (Special Sessions + The Registrar's templated readouts) -- done.
-6. End-game recap visualization -- not yet.
+6. **End-game recap visualization** -- done.
 
 ## Structure
 
@@ -20,19 +20,21 @@ packages/
             tension aggregate), the Special Session state machine and its
             three triggers (section 7), a deterministic templated-readout
             generator (no LLM call), per-player redacted view + WS protocol
-            types. Fully unit-tested (vitest).
+            types (including the end-game recap shape). Fully unit-tested
+            (vitest).
   server/   Express + WebSocket server. In-memory games keyed by a 5-char
             room code. Broadcasts a redacted PlayerView to each connected
             socket after every action. Proxies captured clips to the
             Interhuman API (POST /api/games/:code/speech-events/:id/clip),
             stores the resulting signal_scores server-side, glues them into
-            each player's trust_trajectory, and generates each Special
-            Session's two readouts (never sent to any client except through
-            those two surfaces -- the ambient tension reading and a Special
-            Session's readout -- per section 7).
+            each player's trust_trajectory, generates each Special
+            Session's two readouts, and assembles the full end-game recap
+            (every player's complete signal history) once GAME_END --
+            nothing else ever sends that data to a client (section 7/9
+            step 6).
   client/   React + Vite frontend. Join/create a room, then a phase-driven
             UI (nomination, vote, legislative session, executive powers,
-            Special Sessions, game end), a capture panel
+            Special Sessions, game end + recap charts), a capture panel
             (getUserMedia/MediaRecorder) dropped into the relevant phases,
             and a subtle ambient-tension indicator in the header.
 ```
@@ -98,7 +100,7 @@ npm run analyze-clip --workspace=@interhuman/server -- /path/to/clip.mov
 npm test                # runs shared + server vitest suites
 ```
 
-125 tests: shared covers the section-1 role distribution table, the policy
+131 tests: shared covers the section-1 role distribution table, the policy
 deck (including mid-round reshuffle), the executive-power lookup table, veto
 unlock thresholds, presidency succession (including the special-election
 "resume from who *would have* been President" gotcha in section 3), every
@@ -106,13 +108,18 @@ win condition, per-player view redaction (hidden roles/hands/votes), the
 section-6 capture-trigger state machine, the trust_trajectory trend math
 (direction/magnitude bucketing, insufficient-data fallback, the ambient
 tension aggregate), the Special Session state machine (all three triggers,
-guards against acting mid-session, the vote-to-propose flow), and the
-templated readout generator (variant rotation, insufficient-data fallback).
-Server covers the Interhuman proxy's response parsing (including graceful
-fallback to mock scores on any API surprise), the clip-upload route end to
-end (auth, multer parsing, room/event lookup), the trust_trajectory glue
-logic, and Special Session readout generation/logging.
+guards against acting mid-session, the vote-to-propose flow), the templated
+readout generator (variant rotation, insufficient-data fallback), and the
+end-game recap (hidden before GAME_END, identical to every viewer once
+there). Server covers the Interhuman proxy's response parsing (including
+graceful fallback to mock scores on any API surprise), the clip-upload route
+end to end (auth, multer parsing, room/event lookup), the trust_trajectory
+glue logic, Special Session readout generation/logging, and the recap's
+full per-player signal series assembly.
 
-## What's not built yet (see section 9 build order)
+## What's not built yet
 
-- End-game recap visualization (section 9 step 6)
+Nothing from the section 9 build order -- all 6 steps are done. The spec's
+own section 10 "Decisions (resolved)" and later sections describe further
+optional directions (e.g. revisiting templated readouts with an LLM after
+more playtesting) that were deliberately left as future work, not gaps.

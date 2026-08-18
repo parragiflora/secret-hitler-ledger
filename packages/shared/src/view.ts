@@ -42,6 +42,28 @@ export interface PendingSpecialSessionVoteView {
   myVote: VoteChoice | null;
 }
 
+// Section 9 step 6: the end-game recap. One point per scored speech event
+// (chronological, not bucketed by round -- a player can speak more than
+// once in a round), so the client can plot each signal as a simple line.
+export interface SignalSeriesPoint {
+  round: number;
+  confidence: number;
+  stress: number;
+  skepticism: number;
+  hesitation: number;
+}
+
+export interface PlayerRecapEntry {
+  playerId: string;
+  name: string;
+  role: Role;
+  points: SignalSeriesPoint[];
+}
+
+export interface GameRecap {
+  players: PlayerRecapEntry[];
+}
+
 export interface PlayerView {
   gameId: string;
   code: string;
@@ -93,6 +115,13 @@ export interface PlayerView {
   winReason: WinReason | null;
   finalRoles: Record<string, Role> | null; // revealed to everyone only at GAME_END
 
+  // Section 9 step 6: the full trust_trajectory history for every player,
+  // shown only once the game has ended -- the payoff moment, contrasted
+  // against what was revealed piecemeal in Special Sessions. Computed
+  // server-side (needs signalScores, outside GameState) and injected via
+  // ViewExtras, same as ambientTension/specialSessionReadouts.
+  recap: GameRecap | null;
+
   // Section 6: the active speech-capture moment, if any, and whether it's
   // already been logged (recorded or skipped) this round. Who's expected to
   // speak is public knowledge (like a spotlight at the table), so this is
@@ -123,6 +152,7 @@ export interface PlayerView {
 export interface ViewExtras {
   ambientTension?: AmbientTensionLevel;
   specialSessionReadouts?: { presidentReadout: string; chancellorReadout: string } | null;
+  recap?: GameRecap | null;
 }
 
 function computeKnownRoles(state: GameState, viewerId: string): Record<string, Role> {
@@ -248,6 +278,7 @@ export function viewForPlayer(state: GameState, viewerId: string, extras: ViewEx
     winner: state.winner,
     winReason: state.winReason,
     finalRoles,
+    recap: state.phase === "GAME_END" ? (extras.recap ?? null) : null,
 
     activeCapture,
     activeCaptureLogged: activeCapture ? captureAlreadyLogged(state, activeCapture) : false,

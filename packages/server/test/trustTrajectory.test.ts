@@ -1,7 +1,20 @@
 import { describe, expect, it } from "vitest";
-import type { SpeechEvent } from "@interhuman/shared";
-import { computePlayerTrustTrajectory, computeRoomAmbientTension } from "../src/trustTrajectory.js";
+import { reduce, type GameState, type SpeechEvent } from "@interhuman/shared";
+import {
+  computeGameRecap,
+  computePlayerSignalSeries,
+  computePlayerTrustTrajectory,
+  computeRoomAmbientTension,
+} from "../src/trustTrajectory.js";
+import { createRoom } from "../src/rooms.js";
 import type { SignalScores } from "../src/interhuman.js";
+
+function twoPlayerState(): GameState {
+  const room = createRoom();
+  let state = reduce(room.state, { type: "JOIN_GAME", playerId: "alice", name: "Alice" });
+  state = reduce(state, { type: "JOIN_GAME", playerId: "bob", name: "Bob" });
+  return state;
+}
 
 function makeEvent(id: string, playerId: string, round: number, skipped = false): SpeechEvent {
   return {
@@ -56,6 +69,63 @@ describe("computePlayerTrustTrajectory", () => {
     expect(trajectory.stress).toEqual({ insufficientData: true });
     expect(trajectory.skepticism).toEqual({ insufficientData: true });
     expect(trajectory.hesitation).toEqual({ insufficientData: true });
+  });
+});
+
+describe("computePlayerSignalSeries", () => {
+  it("returns one point per scored event, in capture order, with all 4 signals and the round number", () => {
+    const events = [makeEvent("e1", "alice", 1), makeEvent("e2", "bob", 1), makeEvent("e3", "alice", 3)];
+    const scores = new Map<string, SignalScores>([
+      ["e1", makeScores({ confidence: 0.2, stress: 0.3, skepticism: 0.4, hesitation: 0.5 })],
+      ["e2", makeScores({ confidence: 0.99 })], // bob's -- must not leak into alice's series
+      ["e3", makeScores({ confidence: 0.6, stress: 0.7, skepticism: 0.8, hesitation: 0.9 })],
+    ]);
+
+    expect(computePlayerSignalSeries(events, scores, "alice")).toEqual([
+      { round: 1, confidence: 0.2, stress: 0.3, skepticism: 0.4, hesitation: 0.5 },
+      { round: 3, confidence: 0.6, stress: 0.7, skepticism: 0.8, hesitation: 0.9 },
+    ]);
+  });
+
+  it("excludes events with no matching signalScores", () => {
+    const events = [makeEvent("e1", "alice", 1, true), makeEvent("e2", "alice", 2)];
+    const scores = new Map<string, SignalScores>([["e2", makeScores()]]);
+    expect(computePlayerSignalSeries(events, scores, "alice")).toHaveLength(1);
+  });
+
+  it("is empty for a player with no speech events", () => {
+    expect(computePlayerSignalSeries([], new Map(), "alice")).toEqual([]);
+  });
+});
+
+describe("computeGameRecap", () => {
+  it("assembles every player's series alongside their name and role", () => {
+    const state: GameState = {
+      ...twoPlayerState(),
+      speechEvents: [makeEvent("e1", "alice", 1), makeEvent("e2", "bob", 1)],
+    };
+    // Roles are normally assigned by START_GAME; set directly here since the
+    // recap doesn't care how they got there, only that it reports whatever's
+    // on the player record.
+    const withRoles: GameState = {
+      ...state,
+      players: state.players.map((p) => ({ ...p, role: p.id === "alice" ? "liberal" : "fascist" })) as GameState["players"],
+    };
+    const scores = new Map<string, SignalScores>([
+      ["e1", makeScores({ confidence: 0.7 })],
+      ["e2", makeScores({ confidence: 0.2 })],
+    ]);
+
+    const recap = computeGameRecap(withRoles, scores);
+    expect(recap.players).toEqual([
+      { playerId: "alice", name: "Alice", role: "liberal", points: [{ round: 1, confidence: 0.7, stress: 0.5, skepticism: 0.5, hesitation: 0.5 }] },
+      { playerId: "bob", name: "Bob", role: "fascist", points: [{ round: 1, confidence: 0.2, stress: 0.5, skepticism: 0.5, hesitation: 0.5 }] },
+    ]);
+  });
+
+  it("gives every player an empty series in a fresh room with no speech yet", () => {
+    const recap = computeGameRecap(twoPlayerState(), new Map());
+    expect(recap.players.map((p) => p.points)).toEqual([[], []]);
   });
 });
 

@@ -192,6 +192,7 @@ input:focus { outline: none; border-color: var(--accent); }
   font-family: var(--display-font);
   font-size: 1.1rem;
   letter-spacing: 0.05em;
+  text-transform: uppercase;
   margin-bottom: 0.8rem;
   transform: rotate(-1.5deg);
   box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.35);
@@ -199,6 +200,7 @@ input:focus { outline: none; border-color: var(--accent); }
 .role-badge.liberal { background: var(--liberal); }
 .role-badge.fascist { background: var(--fascist); }
 .role-badge.hitler { background: var(--hitler); }
+.role-badge.small { font-size: 0.65rem; padding: 0.15rem 0.55rem; margin-bottom: 0; transform: none; box-shadow: none; }
 
 .choice-grid { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 0.8rem; }
 .vote-buttons { display: flex; gap: 1rem; margin: 1rem 0; }
@@ -220,6 +222,24 @@ input:focus { outline: none; border-color: var(--accent); }
 
 .final-roles { list-style: none; padding: 0; }
 .final-roles li { padding: 0.3rem 0; border-bottom: 1px solid var(--border); }
+
+/* Section 9 step 6: end-game recap */
+.recap-section { margin-top: 2rem; padding-top: 1.5rem; border-top: 3px solid var(--accent); }
+.recap-section h3 { color: var(--cream); font-size: 1.1rem; margin-bottom: 0.2rem; }
+.recap-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+.recap-card { background: var(--panel-2); border: 2px solid var(--border); border-radius: var(--radius); padding: 1rem; }
+.recap-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.6rem; }
+.recap-name { font-weight: 600; }
+.recap-chart-wrap { display: flex; flex-direction: column; gap: 0.5rem; }
+.recap-chart { width: 100%; height: auto; display: block; }
+.recap-legend { display: flex; flex-wrap: wrap; gap: 0.7rem; font-size: 0.7rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.03em; }
+.recap-legend-item { display: inline-flex; align-items: center; gap: 0.3rem; }
+.recap-swatch { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
 
 .app-footer { padding: 1rem 1.5rem; text-align: right; }
 

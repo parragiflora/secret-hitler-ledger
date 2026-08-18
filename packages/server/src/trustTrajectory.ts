@@ -8,6 +8,10 @@ import {
   computeAmbientTension,
   computeTrustTrajectory,
   type AmbientTensionLevel,
+  type GameRecap,
+  type GameState,
+  type Role,
+  type SignalSeriesPoint,
   type SpeechEvent,
   type TrustTrajectory,
 } from "@interhuman/shared";
@@ -45,4 +49,47 @@ export function computeRoomAmbientTension(
 ): AmbientTensionLevel {
   const trajectories = playerIds.map((id) => computePlayerTrustTrajectory(speechEvents, signalScores, id));
   return computeAmbientTension(trajectories);
+}
+
+/**
+ * Section 9 step 6: one player's full signal history, chronological, for
+ * the end-game recap chart. Unlike computePlayerTrustTrajectory (a
+ * summarized direction/magnitude), this keeps every scored data point --
+ * the whole point of the recap is showing the complete picture that was
+ * only ever revealed piecemeal (via Special Sessions) during play. Same
+ * exclusion rule as the trend version: an event with no matching
+ * signalScores (skipped, still analyzing, upload never landed) is left out
+ * rather than counted as zero.
+ */
+export function computePlayerSignalSeries(
+  speechEvents: SpeechEvent[],
+  signalScores: Map<string, SignalScores>,
+  playerId: string,
+): SignalSeriesPoint[] {
+  const points: SignalSeriesPoint[] = [];
+  for (const event of speechEvents) {
+    if (event.playerId !== playerId) continue;
+    const scores = signalScores.get(event.id);
+    if (!scores) continue;
+    points.push({
+      round: event.roundNumber,
+      confidence: scores.confidence,
+      stress: scores.stress,
+      skepticism: scores.skepticism,
+      hesitation: scores.hesitation,
+    });
+  }
+  return points;
+}
+
+/** Assembles the full end-game recap -- every player's signal history alongside their revealed role. GAME_END only; roles are secret before that. */
+export function computeGameRecap(state: GameState, signalScores: Map<string, SignalScores>): GameRecap {
+  return {
+    players: state.players.map((p) => ({
+      playerId: p.id,
+      name: p.name,
+      role: p.role as Role,
+      points: computePlayerSignalSeries(state.speechEvents, signalScores, p.id),
+    })),
+  };
 }

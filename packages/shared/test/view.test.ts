@@ -96,6 +96,21 @@ describe("per-player view redaction (section 1 role visibility)", () => {
     expect(view.finalRoles![ids[4]]).toBe("hitler");
   });
 
+  it("recap is null before GAME_END, and reflects the injected extra once the game has ended", () => {
+    const { state, ids } = makeStateWithRoles(FIVE_P);
+    expect(viewForPlayer(state, ids[0]).recap).toBeNull();
+
+    const ended: GameState = { ...state, phase: "GAME_END", winner: "liberal", winReason: "liberal_policies" };
+    // Even with a recap injected, it stays hidden before GAME_END -- but once
+    // there, every viewer sees the identical full picture (nothing redacted).
+    const recap = { players: [{ playerId: ids[0], name: "P0", role: "liberal" as const, points: [] }] };
+    expect(viewForPlayer(state, ids[0], { recap }).recap).toBeNull();
+    expect(viewForPlayer(ended, ids[0], { recap }).recap).toEqual(recap);
+    expect(viewForPlayer(ended, ids[2], { recap }).recap).toEqual(recap);
+    // No extra supplied -- defaults to null rather than throwing.
+    expect(viewForPlayer(ended, ids[0]).recap).toBeNull();
+  });
+
   it("ambientTension defaults to calm and reflects whatever the caller injects", () => {
     const { state, ids } = makeStateWithRoles(FIVE_P);
     expect(viewForPlayer(state, ids[0]).ambientTension).toBe("calm");
