@@ -39,7 +39,24 @@ packages/
             and a subtle ambient-tension indicator in the header.
 ```
 
-## Run it
+## Just want to play?
+
+**https://secret-hitler-ledger.fly.dev** -- always on, no setup, no terminal.
+Open it, click **Create New Game**, share the room code. That's the whole
+deployment: one Node process (see `Dockerfile`) serving the API, the
+WebSocket connection, and the built client together, on Fly.io's free tier.
+
+It scales to zero when nobody's using it (`fly.toml`'s
+`auto_stop_machines`/`min_machines_running = 0`, to stay comfortably inside
+the free allowance), so the very first request after a quiet stretch takes a
+few extra seconds to wake back up -- normal, not broken.
+
+To redeploy after code changes: `flyctl deploy` (needs `flyctl auth login`
+once, or `FLY_API_TOKEN` set in a headless environment). Secrets (the
+Interhuman API key) are already set on the app via `flyctl secrets set` --
+redeploying doesn't touch them.
+
+## Run it locally (development)
 
 ```bash
 npm install
@@ -53,12 +70,14 @@ the room code with the rest of the table.
 `npm run dev:server` / `npm run dev:client` still work individually if you
 want them in separate terminals.
 
-### Getting other players onto the page
+### Getting other players onto a local dev instance
 
-The client dev server proxies both its REST calls and its WebSocket
-connection to the game server (see `packages/client/vite.config.ts`), so
-**only port 5173 ever needs to be reachable by other players** -- the game
-server itself never needs to be exposed.
+Only relevant if you're testing local changes rather than using the
+deployed link above. The client dev server proxies both its REST calls and
+its WebSocket connection to the game server (see
+`packages/client/vite.config.ts`), so **only port 5173 ever needs to be
+reachable by other players** -- the game server itself never needs to be
+exposed.
 
 - **Same WiFi:** `npm run dev` prints a `Network:` URL
   (`http://<your-LAN-IP>:5173`) right under the `Local:` one. Anyone on the
@@ -74,8 +93,7 @@ server itself never needs to be exposed.
   Share the `https://....ngrok-free.app` URL it prints (instead of the LAN
   URL) along with the room code. Free tier gives you a new URL each time you
   restart the tunnel, and your machine has to stay on/connected for the
-  whole game -- fine for a one-off game night, not for something you want a
-  permanent link to. Every other player, including you, uses that one URL.
+  whole game -- this is what the Fly.io deployment above exists to avoid.
 
 ### Interhuman API key (optional)
 
