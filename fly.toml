@@ -19,9 +19,15 @@ primary_region = "ams"
 [http_service]
   internal_port = 8787
   force_https = true
-  auto_stop_machines = true
+  # MUST stay off: stopping this machine fully restarts the Node process,
+  # wiping every in-memory game room (no persistence layer exists). A
+  # "quiet" gap during play -- or even just the moment between creating a
+  # room and everyone finishing joining it -- is enough to trigger it and
+  # silently erase the game. Learned this the hard way; do not re-enable
+  # without adding real persistence first.
+  auto_stop_machines = false
   auto_start_machines = true
-  min_machines_running = 0
+  min_machines_running = 1
   processes = ["app"]
 
 [[vm]]

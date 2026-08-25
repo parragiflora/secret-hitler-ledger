@@ -23,9 +23,10 @@ Open it, click **Create New Game**, share the room code with 4-9 other
 players. There's a "How to Play" walkthrough on the join screen and in the
 lobby if anyone needs the rules. Needs 5-10 players to start.
 
-The app scales to zero when nobody's playing, so the first request after a
-quiet stretch takes a few extra seconds to wake up — that's normal, not
-broken.
+The app stays running continuously (no scale-to-zero) -- game rooms live
+only in that process's memory with no persistence layer, so the machine
+restarting for any reason wipes every active room. Don't change that
+without adding real persistence first (see `fly.toml`'s warning comment).
 
 ## How it's built
 
