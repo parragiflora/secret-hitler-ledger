@@ -143,7 +143,10 @@ series assembly.
 
 ## What's not built yet
 
-Nothing from the section 9 build order -- all 6 steps are done. The spec's
-own section 10 "Decisions (resolved)" and later sections describe further
-optional directions (e.g. revisiting templated readouts with an LLM after
-more playtesting) that were deliberately left as future work, not gaps.
+Nothing. All 6 steps of the section 9 build order are done, and the spec
+document ends at section 10 (a short list of resolved decisions made while
+writing the spec, not a roadmap) -- there's no further documented scope
+left. The one open-ended idea on record is in `readout.ts`'s own comment,
+paraphrasing the spec's reasoning: revisit templated readouts with an
+LLM-based version later, only if they start feeling stale after more
+playtesting. That's a maybe-someday note, not a planned next step.
