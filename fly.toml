@@ -1,3 +1,13 @@
+# IMPORTANT: this app must always run as exactly ONE machine. Game rooms
+# live only in that process's in-memory Map -- there's no shared store, so
+# a second machine is a different, disconnected game universe. `flyctl
+# deploy`'s default rolling strategy provisions a second machine "for zero-
+# downtime deploys" regardless of min_machines_running below (that setting
+# only controls scale-to-zero when idle, not deploy-time machine count) --
+# after every deploy, verify with `flyctl machines list --app
+# secret-hitler-ledger` and run `flyctl scale count 1 --app
+# secret-hitler-ledger --yes` if it shows more than one.
+
 app = "secret-hitler-ledger"
 primary_region = "ams"
 

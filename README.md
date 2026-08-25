@@ -97,3 +97,20 @@ flyctl deploy
 Needs `flyctl auth login` once (or `FLY_API_TOKEN` in a headless
 environment). The Interhuman API key is already set on the app as a Fly
 secret and isn't touched by a redeploy.
+
+**After every deploy, check the machine count:**
+
+```bash
+flyctl machines list --app secret-hitler-ledger
+```
+
+Game rooms live only in that process's in-memory `Map` -- there's no shared
+store -- so this app must always run as exactly **one** machine. Fly's
+default rolling-deploy strategy provisions a second one anyway ("for
+zero-downtime deploys"), which silently splits players across two
+disconnected game universes depending on which one their connection lands
+on. If you ever see more than one machine listed:
+
+```bash
+flyctl scale count 1 --app secret-hitler-ledger --yes
+```
