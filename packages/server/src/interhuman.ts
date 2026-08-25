@@ -13,9 +13,16 @@
 //   and hesitation among them -- exactly the 4 this build tracks) and
 //   `probability` is ALWAYS the string enum "high" | "medium" | "low", never
 //   numeric. Parsing still tolerates a numeric probability defensively (in
-//   case that ever changes), and any response shape we don't recognize
-//   falls back to mock scores rather than throwing -- a capture moment
-//   should never break over an API surprise.
+//   case that ever changes).
+//
+// The Interhuman API is a hard requirement, not an optional enhancement --
+// there is no mock-data fallback anywhere in this module. A missing key,
+// a failed call, a non-OK response, or a response missing one of our 4
+// tracked signals all throw rather than substituting fabricated numbers.
+// The server refuses to even start without a key (see index.ts); a capture
+// moment whose analysis fails simply gets no signal_scores entry for that
+// event (the same "insufficient data" path an intentionally-skipped speech
+// already takes), rather than a fake reading standing in for a real one.
 
 import { SIGNAL_KEYS, type SignalKey } from "@interhuman/shared";
 
@@ -25,32 +32,15 @@ export interface SignalScores {
   skepticism: number;
   hesitation: number;
   rawResponseJson: unknown;
-  mocked: boolean;
 }
 
 const API_URL = "https://api.interhuman.ai/v1/upload/analyze";
 const PROB_MAP: Record<string, number> = { high: 0.85, medium: 0.6, low: 0.35 };
 
 // The API rejects clips shorter than this outright (ih5xxx content error) --
-// skip the network round-trip and go straight to mock for a moment too
-// short to have been worth sending.
+// skip the network round-trip for a moment too short to have been worth
+// sending.
 const MIN_CLIP_DURATION_MS = 3000;
-
-function randomInRange(min: number, max: number): number {
-  return Math.round((min + Math.random() * (max - min)) * 100) / 100;
-}
-
-/** Realistic-looking fake signals -- avoids 0/1 extremes so mock mode doesn't look obviously fake at a glance. */
-function mockScores(): SignalScores {
-  return {
-    confidence: randomInRange(0.3, 0.9),
-    stress: randomInRange(0.3, 0.9),
-    skepticism: randomInRange(0.3, 0.9),
-    hesitation: randomInRange(0.3, 0.9),
-    rawResponseJson: null,
-    mocked: true,
-  };
-}
 
 function normalizeProbability(raw: unknown): number | null {
   if (typeof raw === "string") {
@@ -81,44 +71,42 @@ export function parseSignalsResponse(data: unknown): Partial<Record<SignalKey, n
   return out;
 }
 
+/** Throws (never returns fabricated scores) if the key is missing, the call fails, or the response doesn't cover all 4 tracked signals. */
 export async function analyzeClip(buffer: Buffer, filename: string, durationMs?: number): Promise<SignalScores> {
   const apiKey = process.env.INTERHUMAN_API_KEY;
-  if (!apiKey) return mockScores();
-  if (durationMs !== undefined && durationMs < MIN_CLIP_DURATION_MS) return mockScores();
-
-  try {
-    const form = new FormData();
-    form.append("file", new Blob([buffer], { type: "video/webm" }), filename);
-    form.append("include[]", "conversation_quality_overall");
-    form.append("include[]", "conversation_quality_timeline");
-
-    const res = await fetch(API_URL, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}` },
-      body: form,
-    });
-    if (!res.ok) throw new Error(`Interhuman API responded ${res.status}`);
-    const data: unknown = await res.json();
-    const parsed = parseSignalsResponse(data);
-
-    if (Object.keys(parsed).length === 0) {
-      // Response came back but none of our 4 tracked signals were in it --
-      // treat as unrecognized rather than reporting confident zeroes.
-      console.warn("[interhuman] Response had no recognizable signals, falling back to mock:", data);
-      return { ...mockScores(), rawResponseJson: data };
-    }
-
-    const fallback = mockScores();
-    return {
-      confidence: parsed.confidence ?? fallback.confidence,
-      stress: parsed.stress ?? fallback.stress,
-      skepticism: parsed.skepticism ?? fallback.skepticism,
-      hesitation: parsed.hesitation ?? fallback.hesitation,
-      rawResponseJson: data,
-      mocked: false,
-    };
-  } catch (err) {
-    console.error("[interhuman] analyzeClip failed, falling back to mock:", err);
-    return mockScores();
+  if (!apiKey) {
+    // Startup already refuses to run without a key (index.ts) -- this is
+    // just a defensive backstop, should be unreachable in practice.
+    throw new Error("INTERHUMAN_API_KEY is not set.");
   }
+  if (durationMs !== undefined && durationMs < MIN_CLIP_DURATION_MS) {
+    throw new Error(`Clip is too short to analyze (${durationMs}ms, minimum ${MIN_CLIP_DURATION_MS}ms).`);
+  }
+
+  const form = new FormData();
+  form.append("file", new Blob([buffer], { type: "video/webm" }), filename);
+  form.append("include[]", "conversation_quality_overall");
+  form.append("include[]", "conversation_quality_timeline");
+
+  const res = await fetch(API_URL, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}` },
+    body: form,
+  });
+  if (!res.ok) throw new Error(`Interhuman API responded ${res.status}`);
+  const data: unknown = await res.json();
+  const parsed = parseSignalsResponse(data);
+
+  const missing = SIGNAL_KEYS.filter((k) => parsed[k] === undefined);
+  if (missing.length > 0) {
+    throw new Error(`Interhuman response was missing tracked signal(s): ${missing.join(", ")}.`);
+  }
+
+  return {
+    confidence: parsed.confidence!,
+    stress: parsed.stress!,
+    skepticism: parsed.skepticism!,
+    hesitation: parsed.hesitation!,
+    rawResponseJson: data,
+  };
 }

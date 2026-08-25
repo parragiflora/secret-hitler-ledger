@@ -5,7 +5,7 @@ import { generateSpecialSessionReadouts } from "../src/specialSession.js";
 import type { SignalScores } from "../src/interhuman.js";
 
 function makeScores(overrides: Partial<SignalScores> = {}): SignalScores {
-  return { confidence: 0.5, stress: 0.5, skepticism: 0.5, hesitation: 0.5, rawResponseJson: null, mocked: true, ...overrides };
+  return { confidence: 0.5, stress: 0.5, skepticism: 0.5, hesitation: 0.5, rawResponseJson: null, ...overrides };
 }
 
 describe("generateSpecialSessionReadouts", () => {

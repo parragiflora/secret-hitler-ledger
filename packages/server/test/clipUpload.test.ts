@@ -7,14 +7,41 @@ import { server } from "../src/index.js";
 // Exercises the POST /api/games/:code/speech-events/:eventId/clip route
 // end-to-end (multer parsing, auth, room/event lookup, analyzeClip wiring)
 // against the real (but not auto-listening -- see index.ts's direct-execution
-// guard) HTTP server, without touching the real Interhuman API (mocked via
-// analyzeClip's own no-API-key fallback).
+// guard) HTTP server. Interhuman itself is never actually called: `fetch` is
+// wrapped so requests to api.interhuman.ai get a canned response while
+// everything else (the test's own requests to its local server) passes
+// through to the real fetch untouched.
+const originalKey = process.env.INTERHUMAN_API_KEY;
+const originalFetch = globalThis.fetch;
 
 let baseUrl: string;
-const originalKey = process.env.INTERHUMAN_API_KEY;
+let interhumanResponse: () => Promise<Response>;
 
 beforeEach(async () => {
-  delete process.env.INTERHUMAN_API_KEY; // force mock mode -- no network calls in tests
+  process.env.INTERHUMAN_API_KEY = "test-key"; // required now -- analyzeClip throws without one
+
+  // Default: a complete, successful response. Individual tests can
+  // reassign `interhumanResponse` to exercise failure paths.
+  interhumanResponse = async () =>
+    ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        signals: [
+          { type: "confidence", probability: 0.6 },
+          { type: "stress", probability: 0.4 },
+          { type: "skepticism", probability: 0.3 },
+          { type: "hesitation", probability: 0.2 },
+        ],
+      }),
+    }) as Response;
+
+  globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+    const href = typeof url === "string" ? url : url instanceof URL ? url.href : url.url;
+    if (href.startsWith("https://api.interhuman.ai/")) return interhumanResponse();
+    return originalFetch(url, init);
+  }) as typeof fetch;
+
   await new Promise<void>((resolve) => server.listen(0, resolve));
   const addr = server.address();
   const port = typeof addr === "object" && addr ? addr.port : 0;
@@ -24,6 +51,7 @@ beforeEach(async () => {
 afterEach(async () => {
   if (originalKey === undefined) delete process.env.INTERHUMAN_API_KEY;
   else process.env.INTERHUMAN_API_KEY = originalKey;
+  globalThis.fetch = originalFetch;
   await new Promise((resolve) => server.close(resolve));
 });
 
@@ -90,7 +118,7 @@ describe("POST /api/games/:code/speech-events/:eventId/clip", () => {
     expect(res.status).toBe(400);
   });
 
-  it("accepts a valid upload, stores mock signal scores, and never echoes the scores back", async () => {
+  it("accepts a valid upload, stores the real analyzed scores, and never echoes them back", async () => {
     const { room, token } = setUpRoomWithSpeechEvent();
 
     const form = new FormData();
@@ -104,16 +132,30 @@ describe("POST /api/games/:code/speech-events/:eventId/clip", () => {
 
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body).toEqual({ ok: true, mocked: true });
+    expect(body).toEqual({ ok: true });
     // No confidence/stress/skepticism/hesitation fields leaked in the response.
-    expect(Object.keys(body).sort()).toEqual(["mocked", "ok"]);
+    expect(Object.keys(body)).toEqual(["ok"]);
 
     const stored = getRoom(room.code)?.signalScores.get("sp_test_1");
-    expect(stored).toBeDefined();
-    expect(stored?.mocked).toBe(true);
-    for (const key of ["confidence", "stress", "skepticism", "hesitation"] as const) {
-      expect(stored![key]).toBeGreaterThanOrEqual(0);
-      expect(stored![key]).toBeLessThanOrEqual(1);
-    }
+    expect(stored).toEqual({ confidence: 0.6, stress: 0.4, skepticism: 0.3, hesitation: 0.2, rawResponseJson: expect.anything() });
+  });
+
+  it("500s (with the real error message) when analysis fails, and stores no signal_scores entry", async () => {
+    const { room, token } = setUpRoomWithSpeechEvent();
+    interhumanResponse = async () => ({ ok: false, status: 503 }) as Response;
+
+    const form = new FormData();
+    form.append("clip", new Blob([Buffer.from("fake clip bytes")], { type: "video/webm" }), "clip.webm");
+
+    const res = await fetch(makeClipUploadUrl(room.code, "sp_test_1"), {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+    });
+
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.error).toMatch(/503/);
+    expect(getRoom(room.code)?.signalScores.has("sp_test_1")).toBe(false);
   });
 });

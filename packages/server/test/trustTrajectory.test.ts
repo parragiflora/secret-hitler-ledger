@@ -30,7 +30,7 @@ function makeEvent(id: string, playerId: string, round: number, skipped = false)
 }
 
 function makeScores(overrides: Partial<SignalScores> = {}): SignalScores {
-  return { confidence: 0.5, stress: 0.5, skepticism: 0.5, hesitation: 0.5, rawResponseJson: null, mocked: true, ...overrides };
+  return { confidence: 0.5, stress: 0.5, skepticism: 0.5, hesitation: 0.5, rawResponseJson: null, ...overrides };
 }
 
 describe("computePlayerTrustTrajectory", () => {

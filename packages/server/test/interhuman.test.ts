@@ -37,13 +37,15 @@ describe("parseSignalsResponse", () => {
   });
 });
 
+// Section 9 step 3, revised: the Interhuman API is a hard requirement, not
+// an optional enhancement -- there is no mock-data fallback anywhere in
+// analyzeClip. Every failure mode throws instead of substituting fabricated
+// scores; the caller (index.ts's clip-upload route) is responsible for
+// turning that into "no signal_scores entry for this event," the same
+// place a skipped speech already ends up.
 describe("analyzeClip", () => {
   const originalKey = process.env.INTERHUMAN_API_KEY;
   const originalFetch = globalThis.fetch;
-
-  beforeEach(() => {
-    delete process.env.INTERHUMAN_API_KEY;
-  });
 
   afterEach(() => {
     if (originalKey === undefined) delete process.env.INTERHUMAN_API_KEY;
@@ -52,13 +54,18 @@ describe("analyzeClip", () => {
     vi.restoreAllMocks();
   });
 
-  it("returns mock scores when no API key is configured", async () => {
-    const result = await analyzeClip(Buffer.from("fake clip"), "clip.webm");
-    expect(result.mocked).toBe(true);
-    for (const key of ["confidence", "stress", "skepticism", "hesitation"] as const) {
-      expect(result[key]).toBeGreaterThanOrEqual(0);
-      expect(result[key]).toBeLessThanOrEqual(1);
-    }
+  it("throws if no API key is configured", async () => {
+    delete process.env.INTERHUMAN_API_KEY;
+    await expect(analyzeClip(Buffer.from("fake clip"), "clip.webm")).rejects.toThrow(/INTERHUMAN_API_KEY/);
+  });
+
+  it("throws for a clip shorter than the minimum duration, without calling the API", async () => {
+    process.env.INTERHUMAN_API_KEY = "test-key";
+    const fetchMock = vi.fn();
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    await expect(analyzeClip(Buffer.from("fake clip"), "clip.webm", 1000)).rejects.toThrow(/too short/);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("calls the real API and returns parsed scores when a key is present", async () => {
@@ -83,33 +90,47 @@ describe("analyzeClip", () => {
     expect(url).toBe("https://api.interhuman.ai/v1/upload/analyze");
     expect((init.headers as Record<string, string>).Authorization).toBe("Bearer test-key");
 
-    expect(result).toMatchObject({ confidence: 0.9, stress: 0.2, skepticism: 0.5, hesitation: 0.1, mocked: false });
+    expect(result).toMatchObject({ confidence: 0.9, stress: 0.2, skepticism: 0.5, hesitation: 0.1 });
   });
 
-  it("falls back to mock scores if the API call throws", async () => {
+  it("throws if the API call itself throws (network error)", async () => {
     process.env.INTERHUMAN_API_KEY = "test-key";
     globalThis.fetch = vi.fn().mockRejectedValue(new Error("network down")) as unknown as typeof fetch;
 
-    const result = await analyzeClip(Buffer.from("fake clip"), "clip.webm");
-    expect(result.mocked).toBe(true);
+    await expect(analyzeClip(Buffer.from("fake clip"), "clip.webm")).rejects.toThrow("network down");
   });
 
-  it("falls back to mock scores if the API responds with a non-OK status", async () => {
+  it("throws if the API responds with a non-OK status", async () => {
     process.env.INTERHUMAN_API_KEY = "test-key";
     globalThis.fetch = vi.fn().mockResolvedValue({ ok: false, status: 500 }) as unknown as typeof fetch;
 
-    const result = await analyzeClip(Buffer.from("fake clip"), "clip.webm");
-    expect(result.mocked).toBe(true);
+    await expect(analyzeClip(Buffer.from("fake clip"), "clip.webm")).rejects.toThrow(/500/);
   });
 
-  it("falls back to mock scores if the response has none of our 4 tracked signals", async () => {
+  it("throws if the response has none of our 4 tracked signals", async () => {
     process.env.INTERHUMAN_API_KEY = "test-key";
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ signals: [{ type: "agreement", probability: 0.9 }] }),
     }) as unknown as typeof fetch;
 
-    const result = await analyzeClip(Buffer.from("fake clip"), "clip.webm");
-    expect(result.mocked).toBe(true);
+    await expect(analyzeClip(Buffer.from("fake clip"), "clip.webm")).rejects.toThrow(/missing tracked signal/);
+  });
+
+  it("throws if the response is missing even one of our 4 tracked signals", async () => {
+    process.env.INTERHUMAN_API_KEY = "test-key";
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        signals: [
+          { type: "confidence", probability: 0.9 },
+          { type: "stress", probability: 0.2 },
+          { type: "skepticism", probability: 0.5 },
+          // hesitation missing
+        ],
+      }),
+    }) as unknown as typeof fetch;
+
+    await expect(analyzeClip(Buffer.from("fake clip"), "clip.webm")).rejects.toThrow(/hesitation/);
   });
 });

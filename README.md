@@ -95,15 +95,18 @@ exposed.
   restart the tunnel, and your machine has to stay on/connected for the
   whole game -- this is what the Fly.io deployment above exists to avoid.
 
-### Interhuman API key (optional)
+### Interhuman API key (required)
 
 ```bash
 cp packages/server/.env.example packages/server/.env
 # paste your INTERHUMAN_API_KEY into packages/server/.env
 ```
 
-Without a key, clip analysis runs in **mock mode** (realistic fake signal
-scores, no network call) -- the app is fully playable and demoable either way.
+The server refuses to start without this -- there is no mock-data fallback
+anywhere. If a specific clip analysis call fails (bad network, API hiccup),
+that one speech simply gets no `signal_scores` entry (the same
+"insufficient data" state a deliberately-skipped speech already has); it
+never blocks the game itself, and never fabricates a reading in its place.
 
 To test the pipeline against a real recorded video without needing a full
 5-player game:
@@ -129,11 +132,14 @@ tension aggregate), the Special Session state machine (all three triggers,
 guards against acting mid-session, the vote-to-propose flow), the templated
 readout generator (variant rotation, insufficient-data fallback), and the
 end-game recap (hidden before GAME_END, identical to every viewer once
-there). Server covers the Interhuman proxy's response parsing (including
-graceful fallback to mock scores on any API surprise), the clip-upload route
-end to end (auth, multer parsing, room/event lookup), the trust_trajectory
-glue logic, Special Session readout generation/logging, and the recap's
-full per-player signal series assembly.
+there). Server covers the Interhuman proxy's response parsing and its
+required-key/no-fallback error handling (missing key, failed call, non-OK
+response, a response missing one of the 4 tracked signals -- all throw
+rather than substituting fabricated data), the clip-upload route end to end
+(auth, multer parsing, room/event lookup, a failed analysis correctly
+leaving no `signal_scores` entry), the trust_trajectory glue logic, Special
+Session readout generation/logging, and the recap's full per-player signal
+series assembly.
 
 ## What's not built yet
 

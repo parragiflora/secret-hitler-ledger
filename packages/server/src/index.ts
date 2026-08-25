@@ -25,7 +25,23 @@ import { generateSpecialSessionReadouts } from "./specialSession.js";
 try {
   process.loadEnvFile(path.join(path.dirname(fileURLToPath(import.meta.url)), "..", ".env"));
 } catch {
-  // No .env present -- interhuman.ts falls back to mock mode.
+  // No .env present -- fine as long as INTERHUMAN_API_KEY is set some other
+  // way (a real shell export, or a platform secret in production); the
+  // check right below is what actually enforces the key being required,
+  // not this load attempt.
+}
+
+// The Interhuman API is a hard requirement, not an optional enhancement --
+// see interhuman.ts's doc comment. Refuse to even come up without a key
+// rather than silently degrading to mock data once a game is already
+// underway.
+if (!process.env.INTERHUMAN_API_KEY) {
+  console.error(
+    "INTERHUMAN_API_KEY is required and was not found. Set it in packages/server/.env locally " +
+      "(cp packages/server/.env.example packages/server/.env), or as a real secret in production " +
+      "(e.g. `flyctl secrets set INTERHUMAN_API_KEY=...`).",
+  );
+  process.exit(1);
 }
 
 const PORT = Number(process.env.PORT ?? 8787);
@@ -69,10 +85,15 @@ app.post("/api/games/:code/speech-events/:eventId/clip", clipUpload.single("clip
   try {
     const scores = await analyzeClip(req.file.buffer, req.file.originalname || "clip.webm", event.durationMs ?? undefined);
     room.signalScores.set(event.id, scores);
-    res.json({ ok: true, mocked: scores.mocked });
+    res.json({ ok: true });
   } catch (err) {
+    // No mock-data fallback (see interhuman.ts) -- a failed analysis just
+    // means no signal_scores entry for this event, same as a skipped
+    // speech. Still never blocks the game itself: the client's upload is
+    // fire-and-forget (see CapturePanel.tsx), so this only surfaces as a
+    // quiet "failed" badge on the speaker's own screen.
     console.error("[clip upload] analysis failed:", err);
-    res.status(500).json({ error: "Failed to analyze clip." });
+    res.status(500).json({ error: err instanceof Error ? err.message : "Failed to analyze clip." });
   }
 });
 

@@ -66,7 +66,7 @@ export function storedSeatFor(code: string): { name: string } | null {
  * silently no-ops if this browser has no session for the room (shouldn't
  * happen in practice, since you can only be recording your own speech).
  */
-export async function uploadClip(code: string, speechEventId: string, blob: Blob): Promise<{ ok: boolean; mocked?: boolean }> {
+export async function uploadClip(code: string, speechEventId: string, blob: Blob): Promise<{ ok: boolean }> {
   const session = getStoredSession(code);
   if (!session) return { ok: false };
   const form = new FormData();
@@ -78,7 +78,7 @@ export async function uploadClip(code: string, speechEventId: string, blob: Blob
       body: form,
     });
     if (!res.ok) return { ok: false };
-    const data = (await res.json()) as { ok: boolean; mocked?: boolean };
+    const data = (await res.json()) as { ok: boolean };
     return data;
   } catch {
     return { ok: false };
