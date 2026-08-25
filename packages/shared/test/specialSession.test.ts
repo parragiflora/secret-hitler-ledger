@@ -71,9 +71,13 @@ describe("Special Session trigger 1: 3rd Fascist policy (section 7)", () => {
       chancellorId: null, // no government -- a plain failed election, not a veto
       phase: "ELECTION_VOTE",
       presidentialCandidateId: ids[1],
+      // Mirrors what NOMINATE_CHANCELLOR itself would have seeded -- this
+      // state is hand-rigged rather than built via the reducer, so it has to
+      // be seeded by hand too, or the vote never reaches aliveCount.
+      currentVotes: [{ round: state.roundNumber, playerId: ids[1], choice: "ja" }],
     };
     let s = rigged;
-    for (const p of s.players) {
+    for (const p of s.players.filter((pl) => pl.id !== ids[1])) {
       s = reduce(s, { type: "CAST_VOTE", playerId: p.id, choice: "nein" }, rng);
     }
     expect(s.fascistPoliciesEnacted).toBe(3);

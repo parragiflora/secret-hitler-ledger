@@ -298,3 +298,59 @@ input:focus { outline: none; border-color: var(--accent); }
   border-radius: var(--radius);
   background: rgba(232, 103, 74, 0.08);
 }
+
+/* "How to Play" swipeable rules carousel */
+.rules-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: rgba(10, 11, 14, 0.75);
+}
+.rules-card {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  min-height: 420px;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 2px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 2rem 1.6rem 1.4rem;
+  touch-action: pan-y;
+  text-align: left; /* overrides .join-screen's centered text -- this overlay lives inside it in the DOM */
+}
+.rules-card h2 { text-align: center; }
+.rules-close {
+  position: absolute;
+  top: 0.8rem;
+  right: 1rem;
+  font-size: 0.75rem;
+}
+.rules-page { flex: 1; }
+.rules-page h2 { color: var(--cream); margin-top: 0.2rem; }
+.rules-page ul { padding-left: 1.1rem; margin: 1rem 0 0; display: flex; flex-direction: column; gap: 0.7rem; }
+.rules-page li { line-height: 1.5; text-transform: none; }
+.rules-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+.rules-dots { display: flex; gap: 0.4rem; }
+.rules-dot {
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+}
+.rules-dot.active { background: var(--accent); border-color: var(--accent); }

@@ -5,8 +5,16 @@ import { CapturePanel } from "./CapturePanel";
 import { GameRecapSection } from "./Recap";
 
 type Send = (action: GameAction) => void;
+
+// Mid-sentence reference to a player -- "you" (lowercase) when it's the
+// viewer themselves, so "President Alice nominates you for Chancellor"
+// reads naturally instead of naming yourself in the third person. Sentences
+// where the substituted name is the GRAMMATICAL SUBJECT (verb agreement,
+// e.g. "X is" vs "you are", or sentence-initial capitalization) can't use
+// this directly -- those are special-cased at the call site instead.
 function nameOf(view: PlayerView, id: string | null): string {
   if (!id) return "?";
+  if (id === view.myId) return "you";
   return view.players.find((p) => p.id === id)?.name ?? "?";
 }
 
@@ -102,14 +110,24 @@ export function Nomination({ view, send }: { view: PlayerView; send: Send }) {
 
 export function ElectionVote({ view, send }: { view: PlayerView; send: Send }) {
   const voted = view.myVote !== null;
+  const isPresident = view.myId === view.presidentId;
+  const isNominee = view.myId === view.presidentialCandidateId;
   return (
     <div className="panel">
       <h2>Election Vote</h2>
       <p>
-        President {nameOf(view, view.presidentId)} nominates {nameOf(view, view.presidentialCandidateId)} for
-        Chancellor.
+        {isPresident ? (
+          <>You nominate {nameOf(view, view.presidentialCandidateId)} for Chancellor.</>
+        ) : (
+          <>
+            President {nameOf(view, view.presidentId)} nominates {nameOf(view, view.presidentialCandidateId)} for
+            Chancellor.
+          </>
+        )}
       </p>
-      {!voted ? (
+      {isNominee ? (
+        <p className="hint">You're on the ballot -- automatically counted as Ja.</p>
+      ) : !voted ? (
         <div className="vote-buttons">
           <button className="ja" onClick={() => send({ type: "CAST_VOTE", playerId: view.myId, choice: "ja" })}>
             Ja!
@@ -198,11 +216,16 @@ export function LegislativeChancellorPanel({ view, send }: { view: PlayerView; s
 
 export function VetoResponsePanel({ view, send }: { view: PlayerView; send: Send }) {
   const isPresident = view.myId === view.presidentId;
+  const isChancellor = view.myId === view.chancellorId;
   return (
     <div className="panel">
       <h2>Veto Proposed</h2>
       <p>
-        Chancellor {nameOf(view, view.chancellorId)} proposes vetoing both policies.
+        {isChancellor ? (
+          <>You propose vetoing both policies.</>
+        ) : (
+          <>Chancellor {nameOf(view, view.chancellorId)} proposes vetoing both policies.</>
+        )}
       </p>
       {isPresident ? (
         <div className="vote-buttons">
@@ -227,7 +250,9 @@ export function PolicyDefensePanel({ view, send }: { view: PlayerView; send: Sen
     <div className="panel">
       <h2>Policy Enacted</h2>
       <PolicyCard type={view.lastEnactedPolicy!} />
-      <p className="hint">Chancellor {nameOf(view, view.chancellorId)} defends the decision.</p>
+      <p className="hint">
+        {isChancellor ? "You defend the decision." : <>Chancellor {nameOf(view, view.chancellorId)} defends the decision.</>}
+      </p>
       <CapturePanel view={view} send={send} />
       {isChancellor && (
         <button disabled={captureBlocking} onClick={() => send({ type: "ACKNOWLEDGE_POLICY_DEFENSE", chancellorId: view.myId })}>
@@ -323,7 +348,11 @@ export function ExecutiveActionPanel({ view, send }: { view: PlayerView; send: S
       return (
         <div className="panel">
           <h2>Special Election</h2>
-          <p>{nameOf(view, view.specialElectionNextPresidentId)} will be the next President.</p>
+          <p>
+            {view.specialElectionNextPresidentId === view.myId
+              ? "You will be the next President."
+              : <>{nameOf(view, view.specialElectionNextPresidentId)} will be the next President.</>}
+          </p>
           {isPresident && (
             <button onClick={() => send({ type: "ACKNOWLEDGE_EXECUTIVE_ACTION", presidentId: view.myId })}>Continue</button>
           )}
@@ -353,7 +382,11 @@ export function ExecutiveActionPanel({ view, send }: { view: PlayerView; send: S
       return (
         <div className="panel">
           <h2>Execution</h2>
-          <p>{nameOf(view, view.pendingExecutionTargetId)} is about to be executed.</p>
+          <p>
+            {view.pendingExecutionTargetId === view.myId
+              ? "You are about to be executed."
+              : <>{nameOf(view, view.pendingExecutionTargetId)} is about to be executed.</>}
+          </p>
           <CapturePanel view={view} send={send} />
           {isPresident && (
             <button onClick={() => send({ type: "ACKNOWLEDGE_EXECUTIVE_ACTION", presidentId: view.myId })}>Confirm</button>

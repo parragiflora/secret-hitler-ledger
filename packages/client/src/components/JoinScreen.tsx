@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { createRoom, storedSeatFor } from "../useGame";
+import { HowToPlay } from "./HowToPlay";
 
 export function JoinScreen({
   connecting,
@@ -14,6 +15,7 @@ export function JoinScreen({
   const [code, setCode] = useState("");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [showRules, setShowRules] = useState(false);
 
   // If this browser already holds a seat in the room code as typed, offer a
   // one-click rejoin instead of demanding a name for a seat it already has.
@@ -88,6 +90,12 @@ export function JoinScreen({
       </button>
 
       {(error || createError) && <p className="error">{error ?? createError}</p>}
+
+      <button className="link" onClick={() => setShowRules(true)}>
+        How to Play
+      </button>
+
+      {showRules && <HowToPlay onClose={() => setShowRules(false)} />}
     </div>
   );
 }

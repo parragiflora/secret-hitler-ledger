@@ -5,6 +5,7 @@ type Send = (action: GameAction) => void;
 
 function nameOf(view: PlayerView, id: string | null): string {
   if (!id) return "?";
+  if (id === view.myId) return "you";
   return view.players.find((p) => p.id === id)?.name ?? "?";
 }
 
@@ -70,7 +71,13 @@ export function SpecialSessionCallControl({ view, send }: { view: PlayerView; se
     return (
       <div className="special-session-call-banner">
         <p>
-          <strong>{nameOf(view, vote.proposedBy)}</strong> calls for a Special Session.
+          {vote.proposedBy === view.myId ? (
+            "You call for a Special Session."
+          ) : (
+            <>
+              <strong>{nameOf(view, vote.proposedBy)}</strong> calls for a Special Session.
+            </>
+          )}
         </p>
         {!voted ? (
           <div className="vote-buttons">

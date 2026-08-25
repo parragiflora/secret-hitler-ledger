@@ -8,7 +8,9 @@ const rng = seededRng(1);
 
 function castAllJa(state: GameState, choice: VoteChoice = "ja"): GameState {
   let s = state;
-  for (const p of s.players.filter((pl) => pl.isAlive)) {
+  // The nominee's vote is automatic (seeded by NOMINATE_CHANCELLOR itself) --
+  // casting it again would throw, so only the rest of the table votes here.
+  for (const p of s.players.filter((pl) => pl.isAlive && pl.id !== s.presidentialCandidateId)) {
     s = reduce(s, { type: "CAST_VOTE", playerId: p.id, choice }, rng);
   }
   return s;
@@ -49,6 +51,45 @@ describe("full round happy path", () => {
     expect(() =>
       reduce(limited, { type: "NOMINATE_CHANCELLOR", presidentId: ids[0], nomineeId: ids[1] }, rng),
     ).toThrow(GameRuleError);
+  });
+});
+
+describe("the Chancellor nominee's vote is automatic (always Ja)", () => {
+  it("is seeded the instant NOMINATE_CHANCELLOR runs, before anyone else votes", () => {
+    const { state, ids } = makeStateWithRoles(FIVE_P);
+    const s = reduce(state, { type: "NOMINATE_CHANCELLOR", presidentId: ids[0], nomineeId: ids[1] }, rng);
+    expect(s.currentVotes).toEqual([{ round: 1, playerId: ids[1], choice: "ja" }]);
+  });
+
+  it("the nominee cannot cast a separate vote of their own", () => {
+    const { state, ids } = makeStateWithRoles(FIVE_P);
+    const s = reduce(state, { type: "NOMINATE_CHANCELLOR", presidentId: ids[0], nomineeId: ids[1] }, rng);
+    expect(() => reduce(s, { type: "CAST_VOTE", playerId: ids[1], choice: "ja" }, rng)).toThrow(GameRuleError);
+    expect(() => reduce(s, { type: "CAST_VOTE", playerId: ids[1], choice: "nein" }, rng)).toThrow(GameRuleError);
+  });
+
+  it("only the other 4 alive players need to vote for the election to resolve", () => {
+    const { state, ids } = makeStateWithRoles(FIVE_P, defaultDeckFavoring("liberal"));
+    let s = reduce(state, { type: "NOMINATE_CHANCELLOR", presidentId: ids[0], nomineeId: ids[1] }, rng);
+    for (const id of [ids[0], ids[2], ids[3]]) {
+      s = reduce(s, { type: "CAST_VOTE", playerId: id, choice: "ja" }, rng);
+      expect(s.phase).toBe("ELECTION_VOTE"); // still short one vote
+    }
+    // 4th and final real vote (the nominee's was automatic) resolves it.
+    s = reduce(s, { type: "CAST_VOTE", playerId: ids[4], choice: "ja" }, rng);
+    expect(s.phase).toBe("LEGISLATIVE_PRESIDENT");
+    expect(s.lastVoteResult).toEqual({ ja: 5, nein: 0, passed: true });
+  });
+
+  it("still counts toward a failed election if the rest of the table votes it down", () => {
+    const { state, ids } = makeStateWithRoles(FIVE_P);
+    let s = reduce(state, { type: "NOMINATE_CHANCELLOR", presidentId: ids[0], nomineeId: ids[1] }, rng);
+    for (const id of [ids[0], ids[2], ids[3], ids[4]]) {
+      s = reduce(s, { type: "CAST_VOTE", playerId: id, choice: "nein" }, rng);
+    }
+    // Nominee's auto-Ja (1) vs. 4 Nein -- still fails (ties/minority both fail).
+    expect(s.lastVoteResult).toEqual({ ja: 1, nein: 4, passed: false });
+    expect(s.phase).toBe("NOMINATION"); // government failure -> next round
   });
 });
 

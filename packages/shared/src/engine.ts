@@ -285,8 +285,16 @@ export function reduce(state: GameState, action: GameAction, rng: () => number =
       if (!eligible.some((p) => p.id === nominee.id)) {
         throw new GameRuleError(`${nominee.name} is not eligible for nomination (dead or term-limited).`);
       }
+      // The nominee's own vote is automatic (always Ja) -- nobody realistically
+      // votes against their own candidacy, and it saves them a pointless tap.
+      // Seeded here rather than left for them to cast explicitly.
       return withLog(
-        { ...state, phase: "ELECTION_VOTE", presidentialCandidateId: nominee.id, currentVotes: [] },
+        {
+          ...state,
+          phase: "ELECTION_VOTE",
+          presidentialCandidateId: nominee.id,
+          currentVotes: [{ round: state.roundNumber, playerId: nominee.id, choice: "ja" }],
+        },
         `${requirePlayer(state, action.presidentId).name} nominates ${nominee.name} for Chancellor.`,
       );
     }
@@ -295,6 +303,9 @@ export function reduce(state: GameState, action: GameAction, rng: () => number =
       if (state.phase !== "ELECTION_VOTE") throw new GameRuleError("Not in an election vote.");
       const voter = requirePlayer(state, action.playerId);
       if (!voter.isAlive) throw new GameRuleError("Dead players cannot vote.");
+      if (action.playerId === state.presidentialCandidateId) {
+        throw new GameRuleError("The Chancellor nominee's vote is automatic (always Ja).");
+      }
       if (state.currentVotes.some((v) => v.playerId === action.playerId)) {
         throw new GameRuleError("Player has already voted this round.");
       }
