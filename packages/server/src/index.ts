@@ -76,6 +76,16 @@ app.post("/api/games/:code/speech-events/:eventId/clip", clipUpload.single("clip
   }
 });
 
+// Serves the built client (packages/client/dist) so the whole app -- API,
+// WebSocket, and the frontend -- is one deployable process on one URL. Only
+// relevant in production; in dev the client runs on its own Vite server and
+// proxies /api + /ws back here instead (see packages/client/vite.config.ts).
+// No client-side routing exists beyond "/", so express.static alone (which
+// already serves index.html for that path) is enough -- no SPA fallback
+// route needed.
+const clientDist = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "client", "dist");
+app.use(express.static(clientDist));
+
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server, path: "/ws" });
 
