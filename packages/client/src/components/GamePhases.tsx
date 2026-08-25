@@ -3,6 +3,7 @@ import type { GameAction, PlayerView, PolicyType } from "@interhuman/shared";
 import { eligibleNomineeIds } from "../eligibility";
 import { CapturePanel } from "./CapturePanel";
 import { GameRecapSection } from "./Recap";
+import { HowToPlay } from "./HowToPlay";
 
 type Send = (action: GameAction) => void;
 
@@ -23,6 +24,7 @@ function PolicyCard({ type }: { type: PolicyType }) {
 }
 
 export function WaitingRoom({ view, send }: { view: PlayerView; send: Send }) {
+  const [showRules, setShowRules] = useState(false);
   const canStart = view.players.length >= 5 && view.players.length <= 10;
   return (
     <div className="panel">
@@ -35,6 +37,10 @@ export function WaitingRoom({ view, send }: { view: PlayerView; send: Send }) {
         Start Game
       </button>
       {!canStart && <p className="hint">Need at least 5 players.</p>}
+      <button className="link" onClick={() => setShowRules(true)}>
+        How to Play
+      </button>
+      {showRules && <HowToPlay onClose={() => setShowRules(false)} />}
     </div>
   );
 }
