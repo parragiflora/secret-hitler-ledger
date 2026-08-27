@@ -89,6 +89,28 @@ traffic to the game server, so only port 5173 ever needs to be reachable.
 npm test
 ```
 
+## Simulating a full game (no real players needed)
+
+```bash
+node scripts/simulate-game.mjs                         # against the live deployment
+node scripts/simulate-game.mjs --url http://localhost:8787   # against local dev
+```
+
+Scripts every seat and plays a complete game end to end -- only talks to
+the server's public HTTP/WS API, the same as a real browser would, so it
+catches things unit tests can't: infrastructure bugs, not just game-logic
+ones. `--players <5-10>` to change table size.
+
+`--idle-seconds <n>` closes every connection, waits `<n>` seconds with
+zero traffic, then reconnects with the saved tokens and checks the room
+survived -- this is the exact scenario (a quiet gap between actions, or
+even just the moment while everyone's still joining) that would have
+caught the auto-stop bug described in `fly.toml` before it ever hit a real
+game.
+
+Exits non-zero on any server-side error or if the idle-gap probe fails, so
+it's also fine to script into a pre/post-deploy check.
+
 ## Deploying
 
 ```bash

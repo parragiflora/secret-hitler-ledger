@@ -10,7 +10,8 @@
     "dev": "concurrently -n server,client -c blue,green \"npm run dev:server\" \"npm run dev:client\"",
     "dev:server": "npm run dev --workspace=@interhuman/server",
     "dev:client": "npm run dev --workspace=@interhuman/client",
-    "build": "npm run build --workspace=@interhuman/shared && npm run build --workspace=@interhuman/server && npm run build --workspace=@interhuman/client"
+    "build": "npm run build --workspace=@interhuman/shared && npm run build --workspace=@interhuman/server && npm run build --workspace=@interhuman/client",
+    "simulate": "node scripts/simulate-game.mjs"
   },
   "devDependencies": {
     "concurrently": "^10.0.5",
